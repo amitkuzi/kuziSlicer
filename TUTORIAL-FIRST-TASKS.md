@@ -10,7 +10,8 @@
 
 ```bash
 # 1. Install AI Toolbox plugin
-/plugin install amitkuzi/ai-toolbox
+/plugin marketplace add amitkuzi/ai-toolbox
+/plugin install ai-toolbox@ai-toolbox
 
 # 2. Create your kuziSlicer profile (or copy from DEPLOYMENT-GUIDE.md)
 # Save to: ~/.claude/projects/kuziSlicer/profiles/kuziSlicer.yaml

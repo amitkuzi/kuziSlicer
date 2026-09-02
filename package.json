@@ -1,0 +1,70 @@
+{
+  "name": "kuzislicer",
+  "displayName": "kuziSlicer",
+  "description": "Desktop app for slicing 3D models for 3D printing",
+  "version": "0.0.1",
+  "author": "Amit Kuzi",
+  "homepage": ".",
+  "main": "./dist/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://localhost:3000 && NODE_ENV=development electron .",
+    "build": "npm run build:main && npm run build:vite",
+    "build:vite": "vite build",
+    "build:main": "npm run build:main:entry && npm run build:main:preload",
+    "build:main:entry": "esbuild src/main/main.ts --bundle --platform=node --target=node18 --external:electron --outfile=dist/main.js",
+    "build:main:preload": "esbuild src/main/preload.ts --bundle --platform=browser --target=es2020 --outfile=dist/preload.js",
+    "prestart": "npm run build:main",
+    "start": "NODE_ENV=production electron .",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.14",
+    "concurrently": "^8.2.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.0",
+    "esbuild": "^0.19.0",
+    "postcss": "^8.4.29",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5.1.0",
+    "vite": "^5.0.0",
+    "wait-on": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.kuzislicer.app",
+    "productName": "kuziSlicer",
+    "files": [
+      "dist/main.js",
+      "dist/index.html",
+      "dist/assets/**/*",
+      "node_modules/**/*",
+      "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,test,__tests__,tests,powered-test,example,examples,*.d.ts}"
+    ],
+    "directories": {
+      "buildResources": "brandkit"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "brandkit/logos/logo.svg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "printers": [
+    {
+      "id": "prusa-i3-mk3s",
+      "name": "Prusa i3 MK3S",
+      "nozzleSize": 0.4,
+      "bedSizeX": 250,
+      "bedSizeY": 210,
+      "bedSizeZ": 210,
+      "maxTemp": 300,
+      "maxBedTemp": 110,
+      "maxSpeed": 200,
+      "defaultSpeed": 150,
+      "acceleration": 1000
+    },
+    {
+      "id": "creality-ender3",
+      "name": "Creality Ender 3",
+      "nozzleSize": 0.4,
+      "bedSizeX": 235,
+      "bedSizeY": 235,
+      "bedSizeZ": 250,
+      "maxTemp": 300,
+      "maxBedTemp": 110,
+      "maxSpeed": 150,
+      "defaultSpeed": 120,
+      "acceleration": 800
+    },
+    {
+      "id": "creality-ender3-v2",
+      "name": "Creality Ender 3 V2",
+      "nozzleSize": 0.4,
+      "bedSizeX": 235,
+      "bedSizeY": 235,
+      "bedSizeZ": 250,
+      "maxTemp": 300,
+      "maxBedTemp": 110,
+      "maxSpeed": 180,
+      "defaultSpeed": 150,
+      "acceleration": 900
+    },
+    {
+      "id": "anycubic-i3-mega",
+      "name": "Anycubic i3 Mega",
+      "nozzleSize": 0.4,
+      "bedSizeX": 210,
+      "bedSizeY": 210,
+      "bedSizeZ": 210,
+      "maxTemp": 300,
+      "maxBedTemp": 100,
+      "maxSpeed": 150,
+      "defaultSpeed": 120,
+      "acceleration": 750
+    },
+    {
+      "id": "ultimaker-s5",
+      "name": "Ultimaker S5",
+      "nozzleSize": 0.4,
+      "bedSizeX": 330,
+      "bedSizeY": 240,
+      "bedSizeZ": 300,
+      "maxTemp": 300,
+      "maxBedTemp": 100,
+      "maxSpeed": 300,
+      "defaultSpeed": 200,
+      "acceleration": 1500
+    },
+    {
+      "id": "flashforge-finder",
+      "name": "Flashforge Finder",
+      "nozzleSize": 0.4,
+      "bedSizeX": 140,
+      "bedSizeY": 140,
+      "bedSizeZ": 135,
+      "maxTemp": 260,
+      "maxBedTemp": 60,
+      "maxSpeed": 100,
+      "defaultSpeed": 80,
+      "acceleration": 500
+    }
+  ]
+}

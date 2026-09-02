@@ -1,0 +1,36 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage
+*.lcov
+
+# Compiled extension
+dist
+out
+
+# Dependencies
+node_modules
+
+# IDEs
+.vscode-test/
+.DS_Store
+
+# Generated files
+*.vsix
+
+# Electron build artifacts
+dist/main.js
+dist/preload.js
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -12,7 +12,8 @@
 
 ```bash
 # In VSCode Claude Code
-/plugin install amitkuzi/ai-toolbox
+/plugin marketplace add amitkuzi/ai-toolbox
+/plugin install ai-toolbox@ai-toolbox
 ```
 
 ### Step 2: Create kuziSlicer profile

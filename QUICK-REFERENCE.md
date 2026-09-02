@@ -2,7 +2,8 @@
 
 ## 30-Second Setup
 ```bash
-/plugin install amitkuzi/ai-toolbox
+/plugin marketplace add amitkuzi/ai-toolbox
+/plugin install ai-toolbox@ai-toolbox
 # Copy DEPLOYMENT-GUIDE.md kuziSlicer.yaml to ~/.claude/projects/kuziSlicer/profiles/
 /toolbox:route --profile kuziSlicer-dev "Your first task"
 ```
@@ -85,7 +86,7 @@ Track in spreadsheet:
 
 ## Success Checklist
 
-- [ ] Plugin installed (`/plugin install amitkuzi/ai-toolbox`)
+- [ ] Plugin installed (`/plugin marketplace add amitkuzi/ai-toolbox` then `/plugin install ai-toolbox@ai-toolbox`)
 - [ ] kuziSlicer profile in place (`~/.claude/projects/kuziSlicer/profiles/kuziSlicer.yaml`)
 - [ ] First task routed (`/toolbox:route`)
 - [ ] Outcome logged (`/toolbox:outcome`)

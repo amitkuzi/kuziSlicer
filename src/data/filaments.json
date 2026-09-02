@@ -1,0 +1,104 @@
+{
+  "filaments": [
+    {
+      "id": "pla-generic",
+      "name": "PLA (Generic)",
+      "material": "PLA",
+      "extruderTemp": 200,
+      "bedTemp": 60,
+      "printSpeed": 50,
+      "retractDistance": 5,
+      "retractSpeed": 40
+    },
+    {
+      "id": "pla-prusament",
+      "name": "Prusament PLA",
+      "material": "PLA",
+      "extruderTemp": 210,
+      "bedTemp": 60,
+      "printSpeed": 55,
+      "retractDistance": 5,
+      "retractSpeed": 40
+    },
+    {
+      "id": "petg-generic",
+      "name": "PETG (Generic)",
+      "material": "PETG",
+      "extruderTemp": 230,
+      "bedTemp": 80,
+      "printSpeed": 40,
+      "retractDistance": 6,
+      "retractSpeed": 30
+    },
+    {
+      "id": "petg-prusament",
+      "name": "Prusament PETG",
+      "material": "PETG",
+      "extruderTemp": 240,
+      "bedTemp": 85,
+      "printSpeed": 45,
+      "retractDistance": 6,
+      "retractSpeed": 35
+    },
+    {
+      "id": "abs-generic",
+      "name": "ABS (Generic)",
+      "material": "ABS",
+      "extruderTemp": 240,
+      "bedTemp": 100,
+      "printSpeed": 30,
+      "retractDistance": 7,
+      "retractSpeed": 30
+    },
+    {
+      "id": "tpu-generic",
+      "name": "TPU (Generic)",
+      "material": "TPU",
+      "extruderTemp": 220,
+      "bedTemp": 60,
+      "printSpeed": 20,
+      "retractDistance": 5,
+      "retractSpeed": 25
+    },
+    {
+      "id": "nylon-generic",
+      "name": "Nylon (Generic)",
+      "material": "Nylon",
+      "extruderTemp": 245,
+      "bedTemp": 85,
+      "printSpeed": 35,
+      "retractDistance": 8,
+      "retractSpeed": 30
+    },
+    {
+      "id": "pp-generic",
+      "name": "Polypropylene (PP)",
+      "material": "PP",
+      "extruderTemp": 210,
+      "bedTemp": 50,
+      "printSpeed": 40,
+      "retractDistance": 4,
+      "retractSpeed": 40
+    },
+    {
+      "id": "wood-pla",
+      "name": "Wood-filled PLA",
+      "material": "PLA",
+      "extruderTemp": 205,
+      "bedTemp": 60,
+      "printSpeed": 40,
+      "retractDistance": 5,
+      "retractSpeed": 40
+    },
+    {
+      "id": "carbon-pla",
+      "name": "Carbon Fiber PLA",
+      "material": "PLA",
+      "extruderTemp": 215,
+      "bedTemp": 65,
+      "printSpeed": 50,
+      "retractDistance": 6,
+      "retractSpeed": 40
+    }
+  ]
+}
