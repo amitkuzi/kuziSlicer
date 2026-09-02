@@ -64,8 +64,9 @@ export interface AppSettings {
 // Async invoke channels
 export type InvokeChannels = {
   'printer:list': () => Promise<Printer[]>
-  'file:open': (options?: { defaultPath?: string }) => Promise<string | null>
-  'gcode:send': (cmd: GcodeCommand) => Promise<boolean>
+  'file:open': (options?: { defaultPath?: string }) => Promise<{ canceled: boolean; filePaths: string[] }>
+  'file:read': (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>
+  'gcode:send': (data: { printer: string; gcode: string }) => Promise<{ success: boolean; message: string }>
   'gcode:generate': (modelPath: string, printerName: string, filamentName: string, settings: PrintSettings) => Promise<string>
   'gcode:printers': () => Promise<PrinterProfile[]>
   'gcode:filaments': () => Promise<FilamentProfile[]>

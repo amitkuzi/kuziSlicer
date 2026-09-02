@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electron', {
     const validChannels = [
       'printer:list',
       'file:open',
+      'file:read',
       'gcode:send',
       'gcode:generate',
       'gcode:printers',

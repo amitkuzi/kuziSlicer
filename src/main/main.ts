@@ -55,14 +55,28 @@ function testPrinterConnection(ipAddress: string, port: string = '5000'): boolea
 }
 
 // Load printer and filament profiles
+function getDataPath(): string {
+  // In development: dist/main.js -> ../src/data
+  // In production: dist/main.js -> ../data (same level after packaging)
+  const devPath = path.join(__dirname, '../../src/data')
+  const prodPath = path.join(__dirname, '../data')
+
+  if (fs.existsSync(devPath)) {
+    return devPath
+  }
+  return prodPath
+}
+
 function loadPrinterProfiles(): PrinterProfile[] {
-  const filePath = path.join(__dirname, '../data/printers.json')
+  const dataPath = getDataPath()
+  const filePath = path.join(dataPath, 'printers.json')
   const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
   return data.printers
 }
 
 function loadFilamentProfiles(): FilamentProfile[] {
-  const filePath = path.join(__dirname, '../data/filaments.json')
+  const dataPath = getDataPath()
+  const filePath = path.join(dataPath, 'filaments.json')
   const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
   return data.filaments
 }
@@ -156,6 +170,67 @@ ipcMain.handle('file:open', async () => {
     properties: ['openFile'],
   })
   return result
+})
+
+// IPC Handler: Read file content
+ipcMain.handle('file:read', async (event, filePath: string) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    return { success: true, content }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+// IPC Handlers for Printer Management (S4)
+ipcMain.handle('printer:configured:list', (): ConfiguredPrinter[] => {
+  return loadConfiguredPrinters()
+})
+
+ipcMain.handle(
+  'printer:configured:add',
+  (
+    _event,
+    printer: Omit<ConfiguredPrinter, 'id' | 'status' | 'lastConnected'>
+  ): ConfiguredPrinter => {
+    const printers = loadConfiguredPrinters()
+    const newPrinter: ConfiguredPrinter = {
+      ...printer,
+      id: generatePrinterId(),
+      status: 'unknown',
+      lastConnected: new Date().toISOString(),
+    }
+    printers.push(newPrinter)
+    saveConfiguredPrinters(printers)
+    return newPrinter
+  }
+)
+
+ipcMain.handle(
+  'printer:configured:update',
+  (_event, id: string, updates: Partial<ConfiguredPrinter>): ConfiguredPrinter => {
+    const printers = loadConfiguredPrinters()
+    const index = printers.findIndex((p) => p.id === id)
+    if (index === -1) throw new Error('Printer not found')
+
+    printers[index] = {
+      ...printers[index],
+      ...updates,
+      id,
+      lastConnected: new Date().toISOString(),
+    }
+    saveConfiguredPrinters(printers)
+    return printers[index]
+  }
+)
+
+ipcMain.handle('printer:configured:delete', (_event, id: string): void => {
+  const printers = loadConfiguredPrinters()
+  saveConfiguredPrinters(printers.filter((p) => p.id !== id))
+})
+
+ipcMain.handle('printer:test-connection', (_event, ipAddress: string, port?: string): boolean => {
+  return testPrinterConnection(ipAddress, port || '5000')
 })
 
 function createWindow() {
