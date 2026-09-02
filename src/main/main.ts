@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import { execSync } from 'child_process'
 import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings } from './services/gcodeGenerator'
 import { ConfiguredPrinter } from '../types/ipc'
+import { ProfilesManager } from './services/profilesManager'
 
 let mainWindow: BrowserWindow | null = null
 const isDev = process.env.NODE_ENV === 'development'
@@ -236,6 +237,53 @@ ipcMain.handle('printer:configured:delete', (_event, id: string): void => {
 
 ipcMain.handle('printer:test-connection', (_event, ipAddress: string, port?: string): boolean => {
   return testPrinterConnection(ipAddress, port || '5000')
+})
+
+// IPC Handlers for Profiles Manager
+ipcMain.handle('profiles:export-yaml', async (_event, targetPath?: string): Promise<{ success: boolean; path?: string; error?: string }> => {
+  try {
+    const savePath = targetPath || path.join(app.getPath('documents'), 'kuziSlicer-profiles.yaml')
+    ProfilesManager.saveProfilesYaml(savePath, printerProfiles, filamentProfiles)
+    return { success: true, path: savePath }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('profiles:import-file', async (_event, filePath: string): Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }> => {
+  try {
+    const profiles = ProfilesManager.importFromFile(filePath)
+    return { success: true, ...profiles }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('profiles:import-github', async (_event, owner: string, repo: string, branch?: string, filePath?: string): Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }> => {
+  try {
+    const profiles = await ProfilesManager.importFromGithub(owner, repo, branch || 'main', filePath || 'profiles.yaml')
+    return { success: true, ...profiles }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('profiles:import-url', async (_event, url: string): Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }> => {
+  try {
+    const profiles = await ProfilesManager.importFromUrl(url)
+    return { success: true, ...profiles }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('profiles:merge', async (_event, imported: { printers: PrinterProfile[]; filaments: FilamentProfile[] }, overwrite: boolean): Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }> => {
+  try {
+    const merged = ProfilesManager.mergeProfiles({ printers: printerProfiles, filaments: filamentProfiles }, imported, overwrite)
+    return { success: true, ...merged }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
 })
 
 function createWindow() {

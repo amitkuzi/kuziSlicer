@@ -1,0 +1,92 @@
+# kuziSlicer Profiles Example
+# Save as profiles.yaml in your kuziSlicer config directory or share on GitHub
+#
+# Import with:
+#   - Local file: Use ProfilesManager.importFromFile()
+#   - GitHub: importFromGithub("owner", "repo")
+#   - URL: importFromUrl("https://...")
+
+# Printer configurations
+printers:
+  - id: "printer_001"
+    name: "Ender 3 Pro"
+    nozzleSize: 0.4
+    bedSizeX: 235
+    bedSizeY: 235
+    bedSizeZ: 250
+    maxTemp: 300
+    maxBedTemp: 110
+    maxSpeed: 150
+    defaultSpeed: 80
+    acceleration: 1000
+
+  - id: "printer_002"
+    name: "Prusa i3 MK3S+"
+    nozzleSize: 0.4
+    bedSizeX: 250
+    bedSizeY: 210
+    bedSizeZ: 210
+    maxTemp: 300
+    maxBedTemp: 120
+    maxSpeed: 200
+    defaultSpeed: 100
+    acceleration: 1200
+
+  - id: "printer_003"
+    name: "Bambu Lab X1 Carbon"
+    nozzleSize: 0.4
+    bedSizeX: 256
+    bedSizeY: 256
+    bedSizeZ: 256
+    maxTemp: 320
+    maxBedTemp: 110
+    maxSpeed: 400
+    defaultSpeed: 150
+    acceleration: 5000
+
+# Filament profiles
+filaments:
+  - id: "filament_001"
+    name: "PLA - White (Prusament)"
+    material: "PLA"
+    extruderTemp: 210
+    bedTemp: 60
+    printSpeed: 80
+    retractDistance: 0.8
+    retractSpeed: 25
+
+  - id: "filament_002"
+    name: "PLA - Black (Creality)"
+    material: "PLA"
+    extruderTemp: 205
+    bedTemp: 50
+    printSpeed: 75
+    retractDistance: 1.0
+    retractSpeed: 30
+
+  - id: "filament_003"
+    name: "PETG - Clear (Prusament)"
+    material: "PETG"
+    extruderTemp: 240
+    bedTemp: 85
+    printSpeed: 60
+    retractDistance: 1.2
+    retractSpeed: 35
+
+  - id: "filament_004"
+    name: "ABS - Black (Creality)"
+    material: "ABS"
+    extruderTemp: 245
+    bedTemp: 100
+    printSpeed: 50
+    retractDistance: 2.0
+    retractSpeed: 40
+
+  - id: "filament_005"
+    name: "TPU - Flexible (Prusament)"
+    material: "TPU"
+    extruderTemp: 225
+    bedTemp: 60
+    printSpeed: 30
+    retractDistance: 3.0
+    retractSpeed: 20

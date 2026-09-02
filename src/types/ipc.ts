@@ -79,6 +79,11 @@ export type InvokeChannels = {
   'printer:configured:update': (id: string, printer: Partial<ConfiguredPrinter>) => Promise<ConfiguredPrinter>
   'printer:configured:delete': (id: string) => Promise<void>
   'printer:test-connection': (ipAddress: string, port?: string) => Promise<boolean>
+  'profiles:export-yaml': (targetPath?: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  'profiles:import-file': (filePath: string) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
+  'profiles:import-github': (owner: string, repo: string, branch?: string, filePath?: string) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
+  'profiles:import-url': (url: string) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
+  'profiles:merge': (imported: { printers: PrinterProfile[]; filaments: FilamentProfile[] }, overwrite: boolean) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
 }
 
 // Send channels (fire and forget)
