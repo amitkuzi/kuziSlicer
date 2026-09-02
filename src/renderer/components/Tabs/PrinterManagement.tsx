@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { ConfiguredPrinter } from '../../types/ipc'
+import { ConfiguredPrinter } from '../../../types/ipc'
 
 type ModalMode = 'add' | 'edit' | null
 type ConfirmAction = 'delete' | null

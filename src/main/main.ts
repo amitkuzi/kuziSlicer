@@ -56,14 +56,19 @@ function testPrinterConnection(ipAddress: string, port: string = '5000'): boolea
 
 // Load printer and filament profiles
 function getDataPath(): string {
-  // In development: dist/main.js -> ../src/data
-  // In production: dist/main.js -> ../data (same level after packaging)
-  const devPath = path.join(__dirname, '../../src/data')
-  const prodPath = path.join(__dirname, '../data')
+  // In development: src/data (from project root)
+  // In production: resources/data (after electron-builder packaging)
+  const devPath = path.join(process.cwd(), 'src/data')
+  const prodPath = path.join(process.resourcesPath, 'data')
+
+  console.log('Dev path exists:', fs.existsSync(devPath), devPath)
+  console.log('Prod path exists:', fs.existsSync(prodPath), prodPath)
 
   if (fs.existsSync(devPath)) {
+    console.log('Using dev path:', devPath)
     return devPath
   }
+  console.log('Using prod path:', prodPath)
   return prodPath
 }
 
@@ -234,6 +239,7 @@ ipcMain.handle('printer:test-connection', (_event, ipAddress: string, port?: str
 })
 
 function createWindow() {
+  console.log('Creating window... isDev:', isDev)
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -251,7 +257,18 @@ function createWindow() {
     ? 'http://localhost:3000'
     : `file://${path.join(__dirname, 'index.html')}`
 
-  mainWindow.loadURL(startUrl)
+  console.log('Loading URL:', startUrl)
+  mainWindow.loadURL(startUrl).catch((err) => {
+    console.error('Failed to load URL:', err)
+  })
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('Page failed to load:', errorCode, errorDescription)
+  })
+
+  mainWindow.webContents.on('crashed', () => {
+    console.error('Renderer process crashed')
+  })
 
   if (isDev) {
     mainWindow.webContents.openDevTools()
@@ -262,7 +279,9 @@ function createWindow() {
   })
 }
 
-app.on('ready', createWindow)
+app.whenReady().then(() => {
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

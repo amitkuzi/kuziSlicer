@@ -160,13 +160,16 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
   useEffect(() => {
     const fetchPrinters = async () => {
       try {
-        const result = (await (window as any).electron.invoke('printer:list')) as PrinterInfo[]
+        // Try to get configured printers (added by user in PrinterManagement)
+        const result = (await (window as any).electron.invoke('printer:configured:list')) as PrinterInfo[]
         setPrinters(result)
         if (result.length > 0) {
           setSelectedPrinter(result[0].id)
         }
       } catch (err) {
-        console.error('Failed to fetch printers:', err)
+        // Fallback to empty list if handler doesn't exist yet
+        console.warn('Failed to fetch printers:', err)
+        setPrinters([])
       }
     }
 
@@ -177,13 +180,15 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
     try {
       const result = (await (window as any).electron.invoke('file:open')) as { canceled: boolean; filePaths: string[] }
       if (!result.canceled && result.filePaths[0]) {
-        // Read file using fetch API with file:// protocol
-        const fileUrl = `file://${result.filePaths[0]}`
-        const response = await fetch(fileUrl)
-        const content = await response.text()
-        setCode(content)
-        setMessage({ type: 'success', text: 'G-code loaded successfully' })
-        setTimeout(() => setMessage(null), 2000)
+        // Read file content via IPC
+        const readResult = (await (window as any).electron.invoke('file:read', result.filePaths[0])) as { success: boolean; content?: string; error?: string }
+        if (readResult.success && readResult.content) {
+          setCode(readResult.content)
+          setMessage({ type: 'success', text: 'G-code loaded successfully' })
+          setTimeout(() => setMessage(null), 2000)
+        } else {
+          setMessage({ type: 'error', text: `Failed to read file: ${readResult.error}` })
+        }
       }
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to load file' })
