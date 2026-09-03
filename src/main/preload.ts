@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electron', {
       'printer:list',
       'file:open',
       'file:read',
+      'file:read-binary',
       'gcode:send',
       'gcode:generate',
       'gcode:printers',

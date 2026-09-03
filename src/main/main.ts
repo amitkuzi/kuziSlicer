@@ -15,6 +15,7 @@ let pluginManager: PluginManager | null = null
 const isDev = process.env.NODE_ENV === 'development'
 const userDataPath = app.getPath('userData')
 const printersDataPath = path.join(userDataPath, 'printers.json')
+const settingsDataPath = path.join(userDataPath, 'settings.json')
 
 // ============================================================
 // Helpers
@@ -42,6 +43,25 @@ function saveConfiguredPrinters(printers: ConfiguredPrinter[]): void {
 
 function generatePrinterId(): string {
   return 'printer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+}
+
+function loadSettings(): Record<string, unknown> {
+  try {
+    if (fs.existsSync(settingsDataPath)) {
+      return JSON.parse(fs.readFileSync(settingsDataPath, 'utf-8'))
+    }
+  } catch (err) {
+    console.error('[Main] Load settings failed:', err)
+  }
+  return {}
+}
+
+function saveSettings(settings: Record<string, unknown>): void {
+  try {
+    fs.writeFileSync(settingsDataPath, JSON.stringify(settings, null, 2), 'utf-8')
+  } catch (err) {
+    console.error('[Main] Save settings failed:', err)
+  }
 }
 
 // ============================================================
@@ -109,6 +129,14 @@ ipcMain.handle('gcode:send', async (_event, data: { printer: string; gcode: stri
   return { success: true, message: 'G-code sent successfully' }
 })
 
+ipcMain.handle('settings:get', (_event, key: string) => loadSettings()[key])
+
+ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
+  const settings = loadSettings()
+  settings[key] = value
+  saveSettings(settings)
+})
+
 ipcMain.handle('printer:configured:list', () => loadConfiguredPrinters())
 
 ipcMain.handle('printer:configured:add', (_event, printer: Omit<ConfiguredPrinter, 'id' | 'status' | 'lastConnected'>) => {
@@ -146,9 +174,10 @@ ipcMain.handle('printer:test-connection', (_event, _ipAddress: string) => {
 // IPC Handlers — File I/O
 // ============================================================
 
-ipcMain.handle('file:open', async () => {
+ipcMain.handle('file:open', async (_event, options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => {
   return dialog.showOpenDialog(mainWindow!, {
-    filters: [{ name: 'STL', extensions: ['stl'] }, { name: 'All', extensions: ['*'] }],
+    defaultPath: options?.defaultPath,
+    filters: options?.filters || [{ name: 'STL', extensions: ['stl'] }, { name: 'All', extensions: ['*'] }],
     properties: ['openFile'],
   })
 })
@@ -157,6 +186,18 @@ ipcMain.handle('file:read', async (_event, filePath: string) => {
   try {
     const content = fs.readFileSync(filePath, 'utf-8')
     return { success: true, content }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('file:read-binary', async (_event, filePath: string) => {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: `File not found: ${filePath}` }
+    }
+    const buffer = fs.readFileSync(filePath)
+    return { success: true, data: new Uint8Array(buffer), name: path.basename(filePath) }
   } catch (error) {
     return { success: false, error: String(error) }
   }
@@ -277,20 +318,20 @@ function createWindow() {
 
 async function initializeServices() {
   try {
-    // Initialize PluginHost client
-    pluginHostClient = new PluginHostClient()
-    await pluginHostClient.start()
-    console.log('[Main] PluginHost started')
+    // TODO: Phase 2 — Initialize PluginHost client
+    // pluginHostClient = new PluginHostClient()
+    // await pluginHostClient.start()
+    // console.log('[Main] PluginHost started')
 
-    // Initialize GcodeGenerator with PluginHost
-    await GcodeGenerator.initialize(pluginHostClient)
+    // Initialize GcodeGenerator (Phase 0: without PluginHost)
+    await GcodeGenerator.initialize()
     console.log('[Main] GcodeGenerator initialized')
 
-    // Initialize PluginManager
-    pluginManager = new PluginManager(pluginHostClient)
-    await pluginManager.load()
-    pluginManager.loadConfig()
-    console.log(`[Main] Loaded ${pluginManager.getPlugins().length} plugins`)
+    // TODO: Phase 2 — Initialize PluginManager
+    // pluginManager = new PluginManager(pluginHostClient)
+    // await pluginManager.load()
+    // pluginManager.loadConfig()
+    // console.log(`[Main] Loaded ${pluginManager.getPlugins().length} plugins`)
   } catch (err) {
     console.error('[Main] Service initialization failed:', err)
     // Don't crash the app; plugins are optional in Phase 0
