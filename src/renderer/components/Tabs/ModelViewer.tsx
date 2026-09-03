@@ -10,7 +10,11 @@ interface ModelStats {
   size: { x: number; y: number; z: number }
 }
 
-export const ModelViewer: React.FC = () => {
+interface ModelViewerProps {
+  onModelLoaded?: (path: string | null, fileName: string) => void
+}
+
+export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
@@ -172,6 +176,9 @@ export const ModelViewer: React.FC = () => {
     try {
       const arrayBuffer = await file.arrayBuffer()
       await loadModelFromBuffer(file.name, arrayBuffer)
+      // Electron may still expose the source path on the File object; not guaranteed
+      // under contextIsolation, so G-code generation should prefer the full-path loader.
+      onModelLoaded?.((file as unknown as { path?: string }).path || null, file.name)
     } catch (error) {
       console.error('Error loading model:', error)
       alert('Failed to load model. Please check the file format.')
@@ -199,6 +206,7 @@ export const ModelViewer: React.FC = () => {
         return
       }
       await loadModelFromBuffer(result.name || filePath, result.data.buffer as ArrayBuffer)
+      onModelLoaded?.(filePath, result.name || filePath)
     } catch (error) {
       console.error('Error loading model from path:', error)
       setPathError(String(error))

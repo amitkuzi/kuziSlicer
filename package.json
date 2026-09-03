@@ -19,6 +19,7 @@
     "prestart": "npm run build:main",
     "test:pluginmanager": "node scripts/test-pluginManager.mjs",
     "test:overrideengine": "node scripts/test-overrideEngine.mjs",
+    "test:gcodepipeline": "node scripts/test-gcodePipeline.mjs",
     "start": "cross-env NODE_ENV=production electron .",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"

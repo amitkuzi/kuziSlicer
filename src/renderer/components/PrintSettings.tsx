@@ -66,11 +66,13 @@ const FormField: React.FC<FormFieldProps> = ({ label, children }) => (
 )
 
 export interface PrintSettingsProps {
+  modelPath?: string | null
   onSettingsChange?: (settings: PrintSettingsState) => void
-  onGenerateGcode?: (settings: PrintSettingsState) => void
+  onGenerateGcode?: (gcode: string) => void
 }
 
 export const PrintSettings: React.FC<PrintSettingsProps> = ({
+  modelPath,
   onSettingsChange,
   onGenerateGcode,
 }) => {
@@ -193,14 +195,56 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
     }
   }
 
+  const [generating, setGenerating] = useState(false)
+
+  // Reflect the loaded model's path into the (otherwise free-text) model name field
+  useEffect(() => {
+    if (modelPath) {
+      handleSettingChange('modelName', modelPath.split(/[\\/]/).pop() || modelPath)
+    }
+  }, [modelPath])
+
   const handleGenerateGcode = async () => {
+    if (!modelPath) {
+      alert('Load a model via a full path first (Browse… or paste a path in the 3D Viewer) -- G-code generation needs a file on disk, not just a preview.')
+      return
+    }
+    if (!modelPath.toLowerCase().endsWith('.stl')) {
+      alert('G-code generation currently only supports .stl models.')
+      return
+    }
+    const printer = printers.find((p) => p.id === settings.printer)
+    const filament = filaments.find((f) => f.id === settings.filament)
+    if (!printer) {
+      alert('Select a printer first.')
+      return
+    }
+    if (!filament) {
+      alert('Select a filament first.')
+      return
+    }
+
+    setGenerating(true)
     try {
-      // Invoke gcode generation
-      await window.electron.invoke('gcode:generate', settings)
-      onGenerateGcode?.(settings)
+      const gcode = (await window.electron.invoke(
+        'gcode:generate',
+        modelPath,
+        printer.name,
+        filament.name,
+        {
+          layerHeight: settings.layerHeight,
+          infillDensity: settings.infillPercentage,
+          shellThickness: printer.nozzleSize * 3,
+          supportEnabled: settings.supportEnabled,
+          fanSpeed: 100,
+        }
+      )) as string
+      onGenerateGcode?.(gcode)
     } catch (e) {
       console.error('Failed to generate G-code:', e)
-      alert('Error generating G-code. Please check the console.')
+      alert(`Error generating G-code: ${String(e)}`)
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -438,11 +482,17 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
 
       {/* Action Buttons */}
       <div className="p-4 border-t border-fg2/10 space-y-2">
+        {!modelPath && (
+          <p className="text-xs text-fg2">
+            Load a model by full path (3D Viewer tab) to enable G-code generation.
+          </p>
+        )}
         <button
           onClick={handleGenerateGcode}
-          className="w-full px-4 py-3 bg-ember hover:bg-ember/90 text-onEmber rounded font-semibold text-sm transition-colors"
+          disabled={generating || !modelPath}
+          className="w-full px-4 py-3 bg-ember hover:bg-ember/90 text-onEmber rounded font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Generate G-code
+          {generating ? 'Generating…' : 'Generate G-code'}
         </button>
         <button
           onClick={handleReset}

@@ -10,6 +10,7 @@ export const MainWindow: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('3d-viewer')
   const [printSettings, setPrintSettings] = useState<PrintSettingsState | null>(null)
   const [gcodeData, setGcodeData] = useState<string>('')
+  const [modelPath, setModelPath] = useState<string | null>(null)
 
   const tabs: { id: Tab; label: string }[] = [
     { id: '3d-viewer', label: '3D Viewer' },
@@ -22,8 +23,12 @@ export const MainWindow: React.FC = () => {
       {/* Left Sidebar - Print Settings */}
       <aside className="w-64 bg-raised border-r border-fg2/10 flex flex-col">
         <PrintSettings
+          modelPath={modelPath}
           onSettingsChange={setPrintSettings}
-          onGenerateGcode={(settings) => console.log('Generate G-code:', settings)}
+          onGenerateGcode={(gcode) => {
+            setGcodeData(gcode)
+            setActiveTab('gcode-viewer')
+          }}
         />
       </aside>
 
@@ -48,7 +53,9 @@ export const MainWindow: React.FC = () => {
 
         {/* Tab Content */}
         <div className="flex-1 overflow-hidden">
-          {activeTab === '3d-viewer' && <ModelViewer />}
+          {activeTab === '3d-viewer' && (
+            <ModelViewer onModelLoaded={(path) => setModelPath(path)} />
+          )}
           {activeTab === 'gcode-viewer' && <GcodeViewer gcode={gcodeData} />}
           {activeTab === 'printer-mgmt' && <PrinterManagement />}
         </div>
