@@ -272,6 +272,32 @@
       "maxSpeed": 200,
       "defaultSpeed": 120,
       "acceleration": 1250
+    },
+    {
+      "id": "bambulab-a1-mini",
+      "name": "Bambu Lab A1 Mini",
+      "nozzleSize": 0.4,
+      "bedSizeX": 180,
+      "bedSizeY": 180,
+      "bedSizeZ": 180,
+      "maxTemp": 300,
+      "maxBedTemp": 80,
+      "maxSpeed": 500,
+      "defaultSpeed": 200,
+      "acceleration": 10000
+    },
+    {
+      "id": "elegoo-centauri-carbon",
+      "name": "Elegoo Centauri Carbon",
+      "nozzleSize": 0.4,
+      "bedSizeX": 256,
+      "bedSizeY": 256,
+      "bedSizeZ": 256,
+      "maxTemp": 300,
+      "maxBedTemp": 100,
+      "maxSpeed": 600,
+      "defaultSpeed": 200,
+      "acceleration": 20000
     }
   ]
 }

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
+import { PrinterProfile, FilamentProfile } from '../../types/ipc'
 
 export interface PrintSettingsState {
   modelName: string
   printer: string
   filament: string
+  nozzleSize: number
   layerHeight: number
   infillPercentage: number
   supportEnabled: boolean
@@ -17,6 +19,7 @@ const DEFAULT_SETTINGS: PrintSettingsState = {
   modelName: '',
   printer: '',
   filament: '',
+  nozzleSize: 0.4,
   layerHeight: 0.2,
   infillPercentage: 20,
   supportEnabled: false,
@@ -26,12 +29,7 @@ const DEFAULT_SETTINGS: PrintSettingsState = {
   travelSpeed: 150,
 }
 
-const FILAMENTS = [
-  { id: 'pla', name: 'PLA', extruderTemp: 200, bedTemp: 60 },
-  { id: 'petg', name: 'PETG', extruderTemp: 230, bedTemp: 80 },
-  { id: 'abs', name: 'ABS', extruderTemp: 240, bedTemp: 100 },
-  { id: 'nylon', name: 'Nylon', extruderTemp: 250, bedTemp: 85 },
-]
+const NOZZLE_SIZES = [0.4, 0.6]
 
 interface SectionProps {
   title: string
@@ -77,7 +75,11 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
   onGenerateGcode,
 }) => {
   const [settings, setSettings] = useState<PrintSettingsState>(DEFAULT_SETTINGS)
-  const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([])
+  const [printers, setPrinters] = useState<PrinterProfile[]>([])
+  const [filaments, setFilaments] = useState<FilamentProfile[]>([])
+  const [importUrl, setImportUrl] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState<string | null>(null)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     model: true,
     printer: true,
@@ -99,21 +101,74 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
     }
   }, [])
 
-  // Fetch available printers
-  useEffect(() => {
-    const fetchPrinters = async () => {
-      try {
-        const result = (await window.electron.invoke('printer:list')) as Array<{
-          id: string
-          name: string
-        }>
-        setPrinters(result || [])
-      } catch (e) {
-        console.error('Failed to fetch printers:', e)
-      }
+  // Fetch available printer + filament profiles (bundled + user-imported)
+  const refreshProfiles = async () => {
+    try {
+      const [printerList, filamentList] = await Promise.all([
+        window.electron.invoke('gcode:printers') as Promise<PrinterProfile[]>,
+        window.electron.invoke('gcode:filaments') as Promise<FilamentProfile[]>,
+      ])
+      setPrinters(printerList || [])
+      setFilaments(filamentList || [])
+    } catch (e) {
+      console.error('Failed to fetch profiles:', e)
     }
-    fetchPrinters()
+  }
+
+  useEffect(() => {
+    refreshProfiles()
   }, [])
+
+  const handlePrinterChange = (printerId: string) => {
+    handleSettingChange('printer', printerId)
+    const printer = printers.find((p) => p.id === printerId)
+    if (printer) {
+      handleSettingChange('nozzleSize', printer.nozzleSize)
+    }
+  }
+
+  const handleImportProfiles = async () => {
+    if (!importUrl.trim()) return
+    setImporting(true)
+    setImportMessage(null)
+    try {
+      const isGithub = importUrl.includes('github.com')
+      let result: { success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }
+      if (isGithub) {
+        const match = importUrl.match(/github\.com\/([^/]+)\/([^/]+)(?:\/(?:blob|tree)\/([^/]+)\/(.+))?/)
+        if (!match) throw new Error('Could not parse GitHub URL')
+        const [, owner, repo, branch, filePath] = match
+        result = (await window.electron.invoke(
+          'profiles:import-github',
+          owner,
+          repo,
+          branch || 'main',
+          filePath || 'profiles.yaml'
+        )) as typeof result
+      } else {
+        result = (await window.electron.invoke('profiles:import-url', importUrl)) as typeof result
+      }
+
+      if (!result.success) throw new Error(result.error || 'Import failed')
+
+      const merged = (await window.electron.invoke('profiles:merge', {
+        printers: result.printers || [],
+        filaments: result.filaments || [],
+      }, false)) as { success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }
+
+      if (!merged.success) throw new Error(merged.error || 'Merge failed')
+
+      setImportMessage(
+        `Imported ${result.printers?.length || 0} printer(s), ${result.filaments?.length || 0} filament(s).`
+      )
+      await refreshProfiles()
+      setImportUrl('')
+    } catch (e) {
+      setImportMessage(`Import failed: ${String(e)}`)
+    } finally {
+      setImporting(false)
+    }
+  }
 
   // Save settings to localStorage whenever they change
   useEffect(() => {
@@ -129,11 +184,12 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
   }
 
   const handleFilamentChange = (filamentId: string) => {
-    const filament = FILAMENTS.find((f) => f.id === filamentId)
+    const filament = filaments.find((f) => f.id === filamentId)
     handleSettingChange('filament', filamentId)
     if (filament) {
       handleSettingChange('extruderTemp', filament.extruderTemp)
       handleSettingChange('bedTemp', filament.bedTemp)
+      handleSettingChange('printSpeed', filament.printSpeed)
     }
   }
 
@@ -194,10 +250,10 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
           isOpen={expandedSections.printer}
           onToggle={() => toggleSection('printer')}
         >
-          <FormField label="Printer">
+          <FormField label={`Printer (${printers.length} available)`}>
             <select
               value={settings.printer}
-              onChange={(e) => handleSettingChange('printer', e.target.value)}
+              onChange={(e) => handlePrinterChange(e.target.value)}
               className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember cursor-pointer"
             >
               <option value="">Select a printer...</option>
@@ -208,19 +264,51 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               ))}
             </select>
           </FormField>
-          <FormField label="Filament">
+          <FormField label="Nozzle Size">
+            <select
+              value={settings.nozzleSize}
+              onChange={(e) => handleSettingChange('nozzleSize', parseFloat(e.target.value))}
+              className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember cursor-pointer"
+            >
+              {NOZZLE_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size}mm
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label={`Filament (${filaments.length} available)`}>
             <select
               value={settings.filament}
               onChange={(e) => handleFilamentChange(e.target.value)}
               className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember cursor-pointer"
             >
               <option value="">Select filament...</option>
-              {FILAMENTS.map((f) => (
+              {filaments.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}
                 </option>
               ))}
             </select>
+          </FormField>
+          <FormField label="Import Profiles (URL or GitHub link)">
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                placeholder="https://... profiles.yaml"
+                className="flex-1 px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember"
+              />
+              <button
+                onClick={handleImportProfiles}
+                disabled={importing || !importUrl.trim()}
+                className="px-3 py-2 text-sm bg-fg2/10 text-fg rounded hover:bg-fg2/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {importing ? 'Importing…' : 'Import'}
+              </button>
+            </div>
+            {importMessage && <p className="text-xs text-fg2 mt-1">{importMessage}</p>}
           </FormField>
         </CollapsibleSection>
 

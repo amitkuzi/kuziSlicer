@@ -1,7 +1,7 @@
 // Renderer-side API for profile management
 import { InvokeChannels } from '../../types/ipc'
 
-const invoke = (window as any).electron?.ipcRenderer?.invoke
+const invoke = window.electron.invoke
 
 export const profilesApi = {
   /**

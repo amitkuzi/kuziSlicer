@@ -91,6 +91,27 @@ export class ProfilesManager {
   }
 
   /**
+   * Merge imported profiles into the current set and persist. `overwrite` controls
+   * whether imported entries replace an existing profile with the same id.
+   */
+  static mergeAndSave(imported: ProfilesData, overwrite: boolean): ProfilesData {
+    const current = this.loadProfiles()
+    const printers = overwrite
+      ? this.mergeById([...current.printers], [...imported.printers])
+      : this.mergeById([...imported.printers], [...current.printers])
+    const filaments = overwrite
+      ? this.mergeById([...current.filaments], [...imported.filaments])
+      : this.mergeById([...imported.filaments], [...current.filaments])
+
+    const merged: ProfilesData = {
+      printers: Object.freeze(printers),
+      filaments: Object.freeze(filaments),
+    }
+    this.saveProfiles(merged)
+    return merged
+  }
+
+  /**
    * Save profiles to user data directory.
    */
   static saveProfiles(data: ProfilesData): void {

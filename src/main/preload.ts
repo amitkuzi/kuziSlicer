@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('electron', {
       'printer:configured:update',
       'printer:configured:delete',
       'printer:test-connection',
+      'profiles:export-yaml',
+      'profiles:import-file',
+      'profiles:import-github',
+      'profiles:import-url',
+      'profiles:merge',
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)

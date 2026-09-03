@@ -245,6 +245,18 @@ ipcMain.handle('profiles:import-url', async (_event, url: string) => {
   }
 })
 
+ipcMain.handle('profiles:merge', async (_event, imported: { printers: PrinterProfile[]; filaments: FilamentProfile[] }, overwrite: boolean) => {
+  try {
+    const merged = ProfilesManager.mergeAndSave(
+      { printers: imported.printers || [], filaments: imported.filaments || [] },
+      !!overwrite
+    )
+    return { success: true, printers: [...merged.printers], filaments: [...merged.filaments] }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+})
+
 // ============================================================
 // IPC Handlers — Plugins (Phase 0.3 + 0.7)
 // ============================================================
