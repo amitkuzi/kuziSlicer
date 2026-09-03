@@ -18,6 +18,11 @@ interface GcodeStats {
 
 export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
   const [code, setCode] = useState(gcode)
+
+  // Sync when a freshly generated/loaded gcode prop arrives while already mounted
+  useEffect(() => {
+    if (gcode) setCode(gcode)
+  }, [gcode])
   const [printers, setPrinters] = useState<PrinterInfo[]>([])
   const [selectedPrinter, setSelectedPrinter] = useState<string>('')
   const [isUploading, setIsUploading] = useState(false)

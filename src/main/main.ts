@@ -124,9 +124,12 @@ ipcMain.handle('printer:list', async () => {
 })
 
 ipcMain.handle('gcode:send', async (_event, data: { printer: string; gcode: string }) => {
-  // Phase 3: will call printer adapter (Klipper/Moonraker). For now, stub.
-  console.log(`[Main] Sending G-code to printer: ${data.printer}`)
-  return { success: true, message: 'G-code sent successfully' }
+  // Phase 3: no printer adapter (Klipper/Moonraker/Bambu/Elegoo) exists yet -- report
+  // honest failure rather than a fake success, so the UI never claims a print started
+  // when nothing was actually sent. Use the "Download" button and load the .gcode file
+  // via the printer's own SD card / app in the meantime.
+  console.warn(`[Main] gcode:send not implemented -- printer network control is not built yet (requested printer: ${data.printer})`)
+  return { success: false, message: 'Sending to a printer over the network is not implemented yet. Use Download and load the .gcode file on the printer directly.' }
 })
 
 ipcMain.handle('settings:get', (_event, key: string) => loadSettings()[key])
