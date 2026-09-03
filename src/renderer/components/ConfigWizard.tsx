@@ -21,11 +21,9 @@ export const ConfigWizard: React.FC<ConfigWizardProps> = ({ onComplete }) => {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const response = await fetch('./printers.json')
-        const data = await response.json()
-        const list = data.printers.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))
-        setModels(list)
-        if (list.length > 0) setModel(list[0].id)
+        const printers = (await window.electron.invoke('gcode:printers')) as PrinterModel[]
+        setModels(printers || [])
+        if (printers?.length > 0) setModel(printers[0].id)
       } catch (err) {
         console.error('Error loading printer models:', err)
       }

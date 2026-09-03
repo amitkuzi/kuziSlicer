@@ -251,6 +251,7 @@ ipcMain.handle('profiles:merge', async (_event, imported: { printers: PrinterPro
       { printers: imported.printers || [], filaments: imported.filaments || [] },
       !!overwrite
     )
+    GcodeGenerator.reloadProfiles()
     return { success: true, printers: [...merged.printers], filaments: [...merged.filaments] }
   } catch (error) {
     return { success: false, error: String(error) }

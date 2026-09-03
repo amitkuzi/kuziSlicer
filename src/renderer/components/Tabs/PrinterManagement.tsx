@@ -58,14 +58,8 @@ export const PrinterManagement: React.FC = () => {
 
   const loadModels = async () => {
     try {
-      const response = await fetch('./printers.json')
-      const data = await response.json()
-      setModels(
-        data.printers.map((p: { id: string; name: string }) => ({
-          id: p.id,
-          name: p.name,
-        }))
-      )
+      const printers = (await window.electron.invoke('gcode:printers')) as PrinterModels[]
+      setModels(printers.map((p) => ({ id: p.id, name: p.name })))
     } catch (err) {
       console.error('Error loading printer models:', err)
     }
