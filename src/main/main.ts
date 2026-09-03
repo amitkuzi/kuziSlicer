@@ -1,19 +1,25 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import * as fs from 'fs'
-import { execSync } from 'child_process'
 import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings } from './services/gcodeGenerator'
+import PluginHostClient from './clients/pluginHostClient'
+import PluginManager from './services/pluginManager'
+import ProfilesManager from './services/profilesManager'
+import ProfilesAccessor from './services/profilesAccessor'
 import { ConfiguredPrinter } from '../types/ipc'
-import { ProfilesManager } from './services/profilesManager'
 
 let mainWindow: BrowserWindow | null = null
-const isDev = process.env.NODE_ENV === 'development'
+let pluginHostClient: PluginHostClient | null = null
+let pluginManager: PluginManager | null = null
 
-// Data directory path for user configured printers
+const isDev = process.env.NODE_ENV === 'development'
 const userDataPath = app.getPath('userData')
 const printersDataPath = path.join(userDataPath, 'printers.json')
 
-// Load configured user printers
+// ============================================================
+// Helpers
+// ============================================================
+
 function loadConfiguredPrinters(): ConfiguredPrinter[] {
   try {
     if (fs.existsSync(printersDataPath)) {
@@ -21,86 +27,35 @@ function loadConfiguredPrinters(): ConfiguredPrinter[] {
       return JSON.parse(data)
     }
   } catch (err) {
-    console.error('Error loading configured printers:', err)
+    console.error('[Main] Load configured printers failed:', err)
   }
   return []
 }
 
-// Save configured user printers
 function saveConfiguredPrinters(printers: ConfiguredPrinter[]): void {
   try {
     fs.writeFileSync(printersDataPath, JSON.stringify(printers, null, 2), 'utf-8')
   } catch (err) {
-    console.error('Error saving configured printers:', err)
+    console.error('[Main] Save configured printers failed:', err)
   }
 }
 
-// Generate unique ID for printer
 function generatePrinterId(): string {
   return 'printer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
 }
 
-// Test connection to printer (basic ping test)
-function testPrinterConnection(ipAddress: string, port: string = '5000'): boolean {
-  try {
-    // ponytail: basic connection test via ping, full Octoprint/Fluidd protocol added later
-    if (process.platform === 'win32') {
-      execSync(`ping -n 1 -w 2000 ${ipAddress}`, { stdio: 'ignore' })
-    } else {
-      execSync(`ping -c 1 -W 2 ${ipAddress}`, { stdio: 'ignore' })
-    }
-    return true
-  } catch (err) {
-    return false
-  }
-}
+// ============================================================
+// IPC Handlers — G-code
+// ============================================================
 
-// Load printer and filament profiles
-function getDataPath(): string {
-  // In development: src/data (from project root)
-  // In production: resources/data (after electron-builder packaging)
-  const devPath = path.join(process.cwd(), 'src/data')
-  const prodPath = path.join(process.resourcesPath, 'data')
+ipcMain.handle('gcode:generate', async (_event, modelPath: string, printerName: string, filamentName: string, settings: PrintSettings) => {
+  const printers = GcodeGenerator.getPrinterProfiles()
+  const filaments = GcodeGenerator.getFilamentProfiles()
+  const printer = printers.find((p) => p.name === printerName)
+  const filament = filaments.find((f) => f.name === filamentName)
 
-  console.log('Dev path exists:', fs.existsSync(devPath), devPath)
-  console.log('Prod path exists:', fs.existsSync(prodPath), prodPath)
-
-  if (fs.existsSync(devPath)) {
-    console.log('Using dev path:', devPath)
-    return devPath
-  }
-  console.log('Using prod path:', prodPath)
-  return prodPath
-}
-
-function loadPrinterProfiles(): PrinterProfile[] {
-  const dataPath = getDataPath()
-  const filePath = path.join(dataPath, 'printers.json')
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-  return data.printers
-}
-
-function loadFilamentProfiles(): FilamentProfile[] {
-  const dataPath = getDataPath()
-  const filePath = path.join(dataPath, 'filaments.json')
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-  return data.filaments
-}
-
-const printerProfiles = loadPrinterProfiles()
-const filamentProfiles = loadFilamentProfiles()
-
-// IPC Handler: Generate G-code
-ipcMain.handle('gcode:generate', async (event, modelPath: string, printerName: string, filamentName: string, settings: PrintSettings) => {
-  const printer = printerProfiles.find((p) => p.name === printerName)
-  const filament = filamentProfiles.find((f) => f.name === filamentName)
-
-  if (!printer) {
-    throw new Error(`Printer "${printerName}" not found`)
-  }
-  if (!filament) {
-    throw new Error(`Filament "${filamentName}" not found`)
-  }
+  if (!printer) throw new Error(`Printer "${printerName}" not found`)
+  if (!filament) throw new Error(`Filament "${filamentName}" not found`)
 
   const gcode = await GcodeGenerator.generate({
     modelPath,
@@ -109,77 +64,96 @@ ipcMain.handle('gcode:generate', async (event, modelPath: string, printerName: s
     settings,
   })
 
-  // Save to temp directory
   const tempDir = path.join(app.getPath('temp'), 'kuziSlicer')
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true })
-  }
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
 
-  const gcodeFileName = `print_${Date.now()}.gcode`
-  const gcodeFilePath = path.join(tempDir, gcodeFileName)
+  const gcodeFilePath = path.join(tempDir, `print_${Date.now()}.gcode`)
   fs.writeFileSync(gcodeFilePath, gcode)
-
   return gcodeFilePath
 })
 
-// IPC Handler: List printers
 ipcMain.handle('gcode:printers', async () => {
-  return printerProfiles
+  return GcodeGenerator.getPrinterProfiles()
 })
 
-// IPC Handler: List filaments
 ipcMain.handle('gcode:filaments', async () => {
-  return filamentProfiles
+  return GcodeGenerator.getFilamentProfiles()
 })
 
-// IPC Handler: Estimate print time
-ipcMain.handle('gcode:estimate-time', async (event, modelPath: string, filamentName: string, settings: PrintSettings) => {
-  const filament = filamentProfiles.find((f) => f.name === filamentName)
-  if (!filament) {
-    throw new Error(`Filament "${filamentName}" not found`)
-  }
+ipcMain.handle('gcode:estimate-time', async (_event, modelPath: string, filamentName: string, settings: PrintSettings) => {
+  const filaments = GcodeGenerator.getFilamentProfiles()
+  const filament = filaments.find((f) => f.name === filamentName)
+  if (!filament) throw new Error(`Filament "${filamentName}" not found`)
   return GcodeGenerator.estimatePrintTime(modelPath, filament, settings)
 })
 
-// IPC Handler: Estimate filament weight
-ipcMain.handle('gcode:estimate-weight', async (event, modelPath: string, filamentName: string, settings: PrintSettings) => {
-  const filament = filamentProfiles.find((f) => f.name === filamentName)
-  if (!filament) {
-    throw new Error(`Filament "${filamentName}" not found`)
-  }
+ipcMain.handle('gcode:estimate-weight', async (_event, modelPath: string, filamentName: string, settings: PrintSettings) => {
+  const filaments = GcodeGenerator.getFilamentProfiles()
+  const filament = filaments.find((f) => f.name === filamentName)
+  if (!filament) throw new Error(`Filament "${filamentName}" not found`)
   return GcodeGenerator.estimateFilamentWeight(modelPath, filament, settings)
 })
 
-// IPC Handler: List configured printers
+// ============================================================
+// IPC Handlers — Printer Management
+// ============================================================
+
 ipcMain.handle('printer:list', async () => {
-  // This will be replaced with actual printer discovery
-  // For now, return empty array - PrinterManagement (S4) will handle adding printers
+  // Phase 3: will call Bonjour discovery. For now, empty.
   return []
 })
 
-// IPC Handler: Send G-code to printer
-ipcMain.handle('gcode:send', async (event, data: { printer: string; gcode: string }) => {
-  try {
-    // This would connect to OctoPrint or similar
-    // For MVP, just return success
-    console.log(`Sending G-code to printer: ${data.printer}`)
-    return { success: true, message: 'G-code sent successfully' }
-  } catch (error) {
-    return { success: false, message: `Failed to send G-code: ${error}` }
-  }
+ipcMain.handle('gcode:send', async (_event, data: { printer: string; gcode: string }) => {
+  // Phase 3: will call printer adapter (Klipper/Moonraker). For now, stub.
+  console.log(`[Main] Sending G-code to printer: ${data.printer}`)
+  return { success: true, message: 'G-code sent successfully' }
 })
 
-// IPC Handler: Open file dialog
+ipcMain.handle('printer:configured:list', () => loadConfiguredPrinters())
+
+ipcMain.handle('printer:configured:add', (_event, printer: Omit<ConfiguredPrinter, 'id' | 'status' | 'lastConnected'>) => {
+  const printers = loadConfiguredPrinters()
+  const newPrinter: ConfiguredPrinter = {
+    ...printer,
+    id: generatePrinterId(),
+    status: 'unknown',
+    lastConnected: new Date().toISOString(),
+  }
+  printers.push(newPrinter)
+  saveConfiguredPrinters(printers)
+  return newPrinter
+})
+
+ipcMain.handle('printer:configured:update', (_event, id: string, updates: Partial<ConfiguredPrinter>): ConfiguredPrinter => {
+  const printers = loadConfiguredPrinters()
+  const index = printers.findIndex((p) => p.id === id)
+  if (index === -1) throw new Error('Printer not found')
+  printers[index] = { ...printers[index], ...updates, id, lastConnected: new Date().toISOString() }
+  saveConfiguredPrinters(printers)
+  return printers[index]
+})
+
+ipcMain.handle('printer:configured:delete', (_event, id: string) => {
+  saveConfiguredPrinters(loadConfiguredPrinters().filter((p) => p.id !== id))
+})
+
+ipcMain.handle('printer:test-connection', (_event, _ipAddress: string) => {
+  // Phase 3: test real connection. For now, stub.
+  return true
+})
+
+// ============================================================
+// IPC Handlers — File I/O
+// ============================================================
+
 ipcMain.handle('file:open', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
-    filters: [{ name: 'G-code', extensions: ['gcode', 'gco', 'nc'] }],
+  return dialog.showOpenDialog(mainWindow!, {
+    filters: [{ name: 'STL', extensions: ['stl'] }, { name: 'All', extensions: ['*'] }],
     properties: ['openFile'],
   })
-  return result
 })
 
-// IPC Handler: Read file content
-ipcMain.handle('file:read', async (event, filePath: string) => {
+ipcMain.handle('file:read', async (_event, filePath: string) => {
   try {
     const content = fs.readFileSync(filePath, 'utf-8')
     return { success: true, content }
@@ -188,106 +162,72 @@ ipcMain.handle('file:read', async (event, filePath: string) => {
   }
 })
 
-// IPC Handlers for Printer Management (S4)
-ipcMain.handle('printer:configured:list', (): ConfiguredPrinter[] => {
-  return loadConfiguredPrinters()
-})
+// ============================================================
+// IPC Handlers — Profile Management
+// ============================================================
 
-ipcMain.handle(
-  'printer:configured:add',
-  (
-    _event,
-    printer: Omit<ConfiguredPrinter, 'id' | 'status' | 'lastConnected'>
-  ): ConfiguredPrinter => {
-    const printers = loadConfiguredPrinters()
-    const newPrinter: ConfiguredPrinter = {
-      ...printer,
-      id: generatePrinterId(),
-      status: 'unknown',
-      lastConnected: new Date().toISOString(),
-    }
-    printers.push(newPrinter)
-    saveConfiguredPrinters(printers)
-    return newPrinter
-  }
-)
-
-ipcMain.handle(
-  'printer:configured:update',
-  (_event, id: string, updates: Partial<ConfiguredPrinter>): ConfiguredPrinter => {
-    const printers = loadConfiguredPrinters()
-    const index = printers.findIndex((p) => p.id === id)
-    if (index === -1) throw new Error('Printer not found')
-
-    printers[index] = {
-      ...printers[index],
-      ...updates,
-      id,
-      lastConnected: new Date().toISOString(),
-    }
-    saveConfiguredPrinters(printers)
-    return printers[index]
-  }
-)
-
-ipcMain.handle('printer:configured:delete', (_event, id: string): void => {
-  const printers = loadConfiguredPrinters()
-  saveConfiguredPrinters(printers.filter((p) => p.id !== id))
-})
-
-ipcMain.handle('printer:test-connection', (_event, ipAddress: string, port?: string): boolean => {
-  return testPrinterConnection(ipAddress, port || '5000')
-})
-
-// IPC Handlers for Profiles Manager
-ipcMain.handle('profiles:export-yaml', async (_event, targetPath?: string): Promise<{ success: boolean; path?: string; error?: string }> => {
+ipcMain.handle('profiles:export-yaml', async (_event, targetPath?: string) => {
   try {
     const savePath = targetPath || path.join(app.getPath('documents'), 'kuziSlicer-profiles.yaml')
-    ProfilesManager.saveProfilesYaml(savePath, printerProfiles, filamentProfiles)
+    const data = ProfilesManager.loadProfiles()
+    ProfilesAccessor.writeYaml(savePath, { printers: [...data.printers], filaments: [...data.filaments] })
     return { success: true, path: savePath }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 })
 
-ipcMain.handle('profiles:import-file', async (_event, filePath: string): Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }> => {
+ipcMain.handle('profiles:import-file', async (_event, filePath: string) => {
   try {
-    const profiles = ProfilesManager.importFromFile(filePath)
-    return { success: true, ...profiles }
+    const data = ProfilesManager.importFromFile(filePath)
+    return { success: true, printers: [...data.printers], filaments: [...data.filaments] }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 })
 
-ipcMain.handle('profiles:import-github', async (_event, owner: string, repo: string, branch?: string, filePath?: string): Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }> => {
+ipcMain.handle('profiles:import-github', async (_event, owner: string, repo: string, branch = 'main', filePath = 'profiles.yaml') => {
   try {
-    const profiles = await ProfilesManager.importFromGithub(owner, repo, branch || 'main', filePath || 'profiles.yaml')
-    return { success: true, ...profiles }
+    const data = await ProfilesManager.importFromGithub(owner, repo, branch, filePath)
+    return { success: true, printers: [...data.printers], filaments: [...data.filaments] }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 })
 
-ipcMain.handle('profiles:import-url', async (_event, url: string): Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }> => {
+ipcMain.handle('profiles:import-url', async (_event, url: string) => {
   try {
-    const profiles = await ProfilesManager.importFromUrl(url)
-    return { success: true, ...profiles }
+    const data = await ProfilesManager.importFromUrl(url)
+    return { success: true, printers: [...data.printers], filaments: [...data.filaments] }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 })
 
-ipcMain.handle('profiles:merge', async (_event, imported: { printers: PrinterProfile[]; filaments: FilamentProfile[] }, overwrite: boolean): Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }> => {
-  try {
-    const merged = ProfilesManager.mergeProfiles({ printers: printerProfiles, filaments: filamentProfiles }, imported, overwrite)
-    return { success: true, ...merged }
-  } catch (error) {
-    return { success: false, error: String(error) }
-  }
+// ============================================================
+// IPC Handlers — Plugins (Phase 0.3 + 0.7)
+// ============================================================
+
+ipcMain.handle('plugin:list', async () => {
+  return pluginManager?.getPlugins() || []
 })
+
+ipcMain.handle('plugin:invoke', async (_event, pluginId: string, request: unknown) => {
+  if (!pluginManager) throw new Error('Plugin manager not initialized')
+  return pluginManager.invokePlugin(pluginId, request)
+})
+
+ipcMain.handle('plugin:stream', async (_event, pluginId: string, request: unknown, onProgress?: (event: unknown) => void) => {
+  if (!pluginManager) throw new Error('Plugin manager not initialized')
+  return pluginManager.streamPlugin(pluginId, request, onProgress || (() => {}))
+})
+
+// ============================================================
+// Window + Lifecycle
+// ============================================================
 
 function createWindow() {
-  console.log('Creating window... isDev:', isDev)
+  console.log('[Main] Creating window... isDev:', isDev)
 
   const getIconPath = () => {
     const devPath = path.join(process.cwd(), 'brandkit/icons/kuzislicer/icon-1024.png')
@@ -311,21 +251,19 @@ function createWindow() {
     },
   })
 
-  const startUrl = isDev
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, 'index.html')}`
+  const startUrl = isDev ? 'http://localhost:3000' : `file://${path.join(__dirname, 'index.html')}`
 
-  console.log('Loading URL:', startUrl)
+  console.log('[Main] Loading URL:', startUrl)
   mainWindow.loadURL(startUrl).catch((err) => {
-    console.error('Failed to load URL:', err)
+    console.error('[Main] Failed to load URL:', err)
   })
 
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('Page failed to load:', errorCode, errorDescription)
+    console.error('[Main] Page failed to load:', errorCode, errorDescription)
   })
 
   mainWindow.webContents.on('crashed', () => {
-    console.error('Renderer process crashed')
+    console.error('[Main] Renderer process crashed')
   })
 
   if (isDev) {
@@ -337,7 +275,30 @@ function createWindow() {
   })
 }
 
-app.whenReady().then(() => {
+async function initializeServices() {
+  try {
+    // Initialize PluginHost client
+    pluginHostClient = new PluginHostClient()
+    await pluginHostClient.start()
+    console.log('[Main] PluginHost started')
+
+    // Initialize GcodeGenerator with PluginHost
+    await GcodeGenerator.initialize(pluginHostClient)
+    console.log('[Main] GcodeGenerator initialized')
+
+    // Initialize PluginManager
+    pluginManager = new PluginManager(pluginHostClient)
+    await pluginManager.load()
+    pluginManager.loadConfig()
+    console.log(`[Main] Loaded ${pluginManager.getPlugins().length} plugins`)
+  } catch (err) {
+    console.error('[Main] Service initialization failed:', err)
+    // Don't crash the app; plugins are optional in Phase 0
+  }
+}
+
+app.whenReady().then(async () => {
+  await initializeServices()
   createWindow()
 })
 
@@ -353,6 +314,12 @@ app.on('activate', () => {
   }
 })
 
-app.on('before-quit', () => {
-  // cleanup if needed
+app.on('before-quit', async () => {
+  console.log('[Main] Shutting down')
+  if (pluginManager) {
+    pluginManager.saveConfig()
+  }
+  if (pluginHostClient) {
+    await pluginHostClient.stop()
+  }
 })

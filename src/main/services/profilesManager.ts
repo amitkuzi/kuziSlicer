@@ -1,205 +1,151 @@
-import * as fs from 'fs'
-import * as path from 'path'
-import https from 'https'
-import { PrinterProfile, FilamentProfile } from './gcodeGenerator'
+/**
+ * Profiles Manager — orchestrates profile loading, merging, and validation.
+ * Uses ProfilesAccessor for raw I/O; applies business logic here.
+ */
 
-interface ProfileExport {
-  printers: PrinterProfile[]
-  filaments: FilamentProfile[]
-  exportedAt: string
-  version: string
+import * as path from 'path'
+import * as fs from 'fs'
+import { app } from 'electron'
+import { PrinterProfile, FilamentProfile } from './gcodeGenerator'
+import ProfilesAccessor from './profilesAccessor'
+
+export interface ProfilesData {
+  readonly printers: ReadonlyArray<PrinterProfile>
+  readonly filaments: ReadonlyArray<FilamentProfile>
 }
 
 export class ProfilesManager {
-  static objectToYaml(obj: unknown, indent = 0): string {
-    const spaces = ' '.repeat(indent)
+  /**
+   * Load bundled profiles + user profiles, merge and return.
+   * Bundled profiles are defaults; user profiles override by ID.
+   */
+  static loadProfiles(): ProfilesData {
+    const bundledPrinters: PrinterProfile[] = this.loadBundledProfiles('printers')
+    const bundledFilaments: FilamentProfile[] = this.loadBundledProfiles('filaments')
+    const userDataPath = app.getPath('userData')
+    const userPrintersPath = path.join(userDataPath, 'printers.json')
+    const userFilamentsPath = path.join(userDataPath, 'filaments.json')
 
-    if (Array.isArray(obj)) {
-      return obj.map((item, i) => {
-        const key = indent === 0 ? `- ` : `${spaces}- `
-        if (typeof item === 'object' && item !== null) {
-          return `${key}\n${this.objectToYaml(item, indent + 2)}`
-        }
-        return `${key}${item}`
-      }).join('\n')
-    }
+    let userPrinters: PrinterProfile[] = []
+    let userFilaments: FilamentProfile[] = []
 
-    if (typeof obj === 'object' && obj !== null) {
-      return Object.entries(obj)
-        .map(([key, value]) => {
-          if (value === null || value === undefined) return `${spaces}${key}:`
-          if (typeof value === 'object') {
-            return `${spaces}${key}:\n${this.objectToYaml(value, indent + 2)}`
-          }
-          if (typeof value === 'string') {
-            return `${spaces}${key}: "${value}"`
-          }
-          return `${spaces}${key}: ${value}`
-        })
-        .join('\n')
-    }
-
-    return String(obj)
-  }
-
-  static yamlToObject(yaml: string): Record<string, unknown> {
-    const obj: Record<string, unknown> = {}
-    const lines = yaml.split('\n').filter(l => l.trim())
-    let currentArray: unknown[] | null = null
-    let currentKey: string | null = null
-    const stack: { key: string; obj: Record<string, unknown> | unknown[] }[] = []
-
-    for (const line of lines) {
-      const indent = line.search(/\S/)
-      const trimmed = line.trim()
-
-      if (trimmed.startsWith('-')) {
-        if (!currentArray) {
-          currentArray = []
-          if (currentKey) {
-            obj[currentKey] = currentArray
-          }
-        }
-        const value = trimmed.slice(1).trim()
-        currentArray.push(this.parseYamlValue(value))
-        continue
-      }
-
-      if (trimmed.includes(':')) {
-        currentArray = null
-        const [key, ...valueParts] = trimmed.split(':')
-        const value = valueParts.join(':').trim()
-
-        if (value) {
-          obj[key] = this.parseYamlValue(value)
-        } else {
-          obj[key] = {}
-        }
-        currentKey = key
+    if (ProfilesAccessor.fileExists(userPrintersPath)) {
+      try {
+        const data = ProfilesAccessor.readJson(userPrintersPath)
+        userPrinters = (data.printers as PrinterProfile[]) || []
+      } catch (err) {
+        console.error('[ProfilesManager] Failed to load user printers:', err)
       }
     }
 
-    return obj
-  }
-
-  private static parseYamlValue(value: string): unknown {
-    value = value.trim()
-    if (value.startsWith('"') && value.endsWith('"')) {
-      return value.slice(1, -1)
-    }
-    if (value === 'true') return true
-    if (value === 'false') return false
-    if (!isNaN(Number(value))) return Number(value)
-    return value
-  }
-
-  static exportToYaml(printers: PrinterProfile[], filaments: FilamentProfile[]): string {
-    const data: ProfileExport = {
-      printers,
-      filaments,
-      exportedAt: new Date().toISOString(),
-      version: '1.0',
+    if (ProfilesAccessor.fileExists(userFilamentsPath)) {
+      try {
+        const data = ProfilesAccessor.readJson(userFilamentsPath)
+        userFilaments = (data.filaments as FilamentProfile[]) || []
+      } catch (err) {
+        console.error('[ProfilesManager] Failed to load user filaments:', err)
+      }
     }
 
-    let yaml = '# kuziSlicer Profiles Export\n'
-    yaml += `# Exported: ${data.exportedAt}\n`
-    yaml += `# Version: ${data.version}\n\n`
+    // Merge: user overrides bundled by ID
+    const printers = this.mergeById(bundledPrinters, userPrinters)
+    const filaments = this.mergeById(bundledFilaments, userFilaments)
 
-    yaml += 'printers:\n'
-    yaml += this.objectToYaml(printers, 2) + '\n\n'
-
-    yaml += 'filaments:\n'
-    yaml += this.objectToYaml(filaments, 2)
-
-    return yaml
+    return { printers: Object.freeze([...printers]), filaments: Object.freeze([...filaments]) }
   }
 
-  static saveProfilesYaml(filePath: string, printers: PrinterProfile[], filaments: FilamentProfile[]): void {
-    const yaml = this.exportToYaml(printers, filaments)
-    fs.writeFileSync(filePath, yaml, 'utf-8')
-  }
-
-  static loadProfilesYaml(filePath: string): { printers: PrinterProfile[]; filaments: FilamentProfile[] } {
-    const yaml = fs.readFileSync(filePath, 'utf-8')
-    const data = this.yamlToObject(yaml)
-
+  /**
+   * Import profiles from URL (GitHub or direct).
+   */
+  static async importFromUrl(url: string): Promise<ProfilesData> {
+    const content = await ProfilesAccessor.fetchUrl(url)
+    const raw = ProfilesAccessor.yamlToObject(content)
     return {
-      printers: (data.printers as PrinterProfile[]) || [],
-      filaments: (data.filaments as FilamentProfile[]) || [],
+      printers: Object.freeze((raw.printers as PrinterProfile[]) || []),
+      filaments: Object.freeze((raw.filaments as FilamentProfile[]) || []),
     }
   }
 
-  static fetchFromUrl(url: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      https
-        .get(url, (res) => {
-          let data = ''
-          res.on('data', (chunk) => {
-            data += chunk
-          })
-          res.on('end', () => resolve(data))
-        })
-        .on('error', reject)
-    })
-  }
-
+  /**
+   * Import profiles from GitHub raw content.
+   */
   static async importFromGithub(
     owner: string,
     repo: string,
     branch = 'main',
     filePath = 'profiles.yaml'
-  ): Promise<{ printers: PrinterProfile[]; filaments: FilamentProfile[] }> {
+  ): Promise<ProfilesData> {
     const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`
-    const yaml = await this.fetchFromUrl(url)
-    return this.parseYamlProfiles(yaml)
+    return this.importFromUrl(url)
   }
 
-  static async importFromUrl(url: string): Promise<{ printers: PrinterProfile[]; filaments: FilamentProfile[] }> {
-    const yaml = await this.fetchFromUrl(url)
-    return this.parseYamlProfiles(yaml)
+  /**
+   * Import profiles from local file.
+   */
+  static importFromFile(filePath: string): ProfilesData {
+    const raw = ProfilesAccessor.readYaml(filePath)
+    return {
+      printers: Object.freeze((raw.printers as PrinterProfile[]) || []),
+      filaments: Object.freeze((raw.filaments as FilamentProfile[]) || []),
+    }
   }
 
-  static importFromFile(filePath: string): { printers: PrinterProfile[]; filaments: FilamentProfile[] } {
-    return this.loadProfilesYaml(filePath)
+  /**
+   * Save profiles to user data directory.
+   */
+  static saveProfiles(data: ProfilesData): void {
+    const userDataPath = app.getPath('userData')
+    ProfilesAccessor.writeJson(path.join(userDataPath, 'printers.json'), {
+      printers: [...data.printers],
+    })
+    ProfilesAccessor.writeJson(path.join(userDataPath, 'filaments.json'), {
+      filaments: [...data.filaments],
+    })
   }
 
-  static mergeProfiles(
-    existing: { printers: PrinterProfile[]; filaments: FilamentProfile[] },
-    imported: { printers: PrinterProfile[]; filaments: FilamentProfile[] },
-    overwrite = false
-  ): { printers: PrinterProfile[]; filaments: FilamentProfile[] } {
-    let printers = [...existing.printers]
-    let filaments = [...existing.filaments]
+  /**
+   * Merge two arrays of profiles by ID; second array overrides first.
+   */
+  private static mergeById<T extends { id: string }>(base: T[], updates: T[]): T[] {
+    const result = [...base]
+    const baseIds = new Set(base.map((p) => p.id))
 
-    if (overwrite) {
-      printers = imported.printers
-      filaments = imported.filaments
-    } else {
-      // Merge by ID, imported doesn't override existing
-      const printerIds = new Set(printers.map((p) => p.id))
-      const filamentIds = new Set(filaments.map((f) => f.id))
-
-      imported.printers.forEach((p) => {
-        if (!printerIds.has(p.id)) {
-          printers.push(p)
-        }
-      })
-
-      imported.filaments.forEach((f) => {
-        if (!filamentIds.has(f.id)) {
-          filaments.push(f)
-        }
-      })
+    for (const update of updates) {
+      const idx = result.findIndex((p) => p.id === update.id)
+      if (idx >= 0) {
+        result[idx] = update
+      } else {
+        result.push(update)
+      }
     }
 
-    return { printers, filaments }
+    return result
   }
 
-  private static parseYamlProfiles(yaml: string): { printers: PrinterProfile[]; filaments: FilamentProfile[] } {
-    const data = this.yamlToObject(yaml)
-    return {
-      printers: (data.printers as PrinterProfile[]) || [],
-      filaments: (data.filaments as FilamentProfile[]) || [],
+  /**
+   * Load bundled profiles (printers.json or filaments.json from src/data/).
+   */
+  private static loadBundledProfiles(
+    type: 'printers' | 'filaments'
+  ): (PrinterProfile | FilamentProfile)[] {
+    try {
+      // ponytail: dev loads from src/data; prod from packaged resources
+      const devPath = path.join(process.cwd(), 'src', 'data', `${type}.json`)
+      const prodPath = path.join(process.resourcesPath || process.cwd(), 'data', `${type}.json`)
+      const filePath = fs.existsSync(devPath) ? devPath : prodPath
+
+      if (!fs.existsSync(filePath)) {
+        console.warn(`[ProfilesManager] File not found: ${filePath}`)
+        return []
+      }
+
+      const bundled = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+      return bundled[type] || []
+    } catch (err) {
+      console.warn(`[ProfilesManager] Load bundled ${type} failed:`, err)
+      return []
     }
   }
 }
+
+export default ProfilesManager
