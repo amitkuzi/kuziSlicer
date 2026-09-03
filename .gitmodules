@@ -1,0 +1,3 @@
+[submodule "brandkit"]
+	path = brandkit
+	url = https://github.com/amitkuzi/amitkuzi-brandkit.git

@@ -1,5 +1,45 @@
 {
   "enabledPlugins": {
-    "frontend-design@claude-plugins-official": true
+    "frontend-design@claude-plugins-official": true,
+   "permissions": {
+    "allow": [
+      "Bash",
+      "PowerShell",
+      "Git",
+      "Python",
+      "Yarn",
+      "Java",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "WebFetch ",
+      "mcp__visualize__read_me",
+      "Skill(schedule)",
+      "Skill(schedule:*)",
+      "mcp__claude-in-chrome__list_connected_browsers",
+      "mcp__claude-in-chrome__select_browser",
+      "mcp__claude-in-chrome__navigate",
+      "mcp__claude-in-chrome__get_page_text",
+      "mcp__claude-in-chrome__computer",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__find",
+      "mcp__claude-in-chrome__browser_batch",
+      "WebFetch(domain:www.linkedin.com)",
+      "WebFetch(domain:amitkuzi.wixsite.com)",
+      "Bash(git rm --cached *)",
+      "Bash(rm -rf *)",
+      "PowerShell(Remove-Item -Recurse -Force *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "PowerShell(git push --force *)",
+      "Bash(git push --force:*)"
+    ],
+    "defaultMode": "acceptEdits"
   }
 }
+
+ 
