@@ -62,7 +62,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "brandkit/logos/logo.svg"
+      "icon": "brandkit/icons/kuzislicer/icon-1024.png"
     },
     "nsis": {
       "oneClick": false,
