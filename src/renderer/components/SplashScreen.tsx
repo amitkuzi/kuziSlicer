@@ -19,12 +19,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   return (
     <div
       className={`fixed inset-0 ${fadeOut ? 'fade-out' : 'fade-in'}`}
-      style={{
-        background: '#1b1a18',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
+      style={{ background: '#1b1a18', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       {/* Grid background */}
       <div
@@ -47,14 +42,14 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
               letterSpacing: '-0.04em',
               color: '#f7f4ee',
               lineHeight: 1,
-              fontFamily: "'Archivo', -apple-system, sans-serif",
+              fontFamily: 'system-ui, sans-serif',
             }}
           >
             kuziSlicer
           </div>
           <div
             style={{
-              fontFamily: "'JetBrains Mono', monospace",
+              fontFamily: 'monospace',
               fontSize: '10px',
               letterSpacing: '0.28em',
               textTransform: 'uppercase',
@@ -93,265 +88,57 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             height: '100%',
           }}
         >
-          {/* Left: 3D printer iso */}
+          {/* Left: Simple 3D printer icon */}
           <div
             style={{
               position: 'relative',
               height: '100%',
               maxHeight: '480px',
               perspective: '2600px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                transformStyle: 'preserve-3d',
-                transform: 'rotateX(-20deg) rotateY(-36deg)',
-              }}
-            >
-              {/* Enclosure box */}
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  border: '1px solid rgba(247,244,238,0.4)',
-                  background: 'rgba(247,244,238,0.03)',
-                  transform: 'translateZ(105px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  border: '1px solid rgba(247,244,238,0.22)',
-                  transform: 'translateZ(-105px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  border: '1px solid rgba(247,244,238,0.3)',
-                  background: 'rgba(247,244,238,0.05)',
-                  transform: 'rotateY(90deg) translateZ(105px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  border: '1px solid rgba(247,244,238,0.22)',
-                  transform: 'rotateY(-90deg) translateZ(105px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  border: '1px solid rgba(247,244,238,0.3)',
-                  background: 'rgba(247,244,238,0.06)',
-                  transform: 'rotateX(90deg) translateZ(105px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  border: '1px solid rgba(247,244,238,0.28)',
-                  background: 'rgba(247,244,238,0.04)',
-                  transform: 'rotateX(-90deg) translateZ(105px)',
-                }}
-              />
-
-              {/* Heated bed */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '14%',
-                  top: '14%',
-                  width: '72%',
-                  height: '72%',
-                  border: '1px solid oklch(0.7 0.18 46 / 0.75)',
-                  background: 'oklch(0.68 0.19 45 / 0.14)',
-                  transform: 'rotateX(-90deg) translateZ(92px)',
-                  backgroundImage:
-                    'linear-gradient(oklch(0.7 0.18 46 / 0.25) 1px, transparent 1px), linear-gradient(90deg, oklch(0.7 0.18 46 / 0.25) 1px, transparent 1px)',
-                  backgroundSize: '16px 16px',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: '8%',
-                    right: '8%',
-                    top: '16%',
-                    height: '2px',
-                    background: 'rgba(247,244,238,0.3)',
-                  }}
-                />
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: '8%',
-                    right: '8%',
-                    bottom: '16%',
-                    height: '2px',
-                    background: 'rgba(247,244,238,0.3)',
-                  }}
-                />
-              </div>
-
-              {/* X gantry rail and carriage */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: '26%',
-                  height: '6px',
-                  background: 'rgba(247,244,238,0.45)',
-                  transform: 'translateZ(0px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '40%',
-                  top: '26%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  transform: 'translateZ(6px)',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'relative',
-                    width: '38px',
-                    height: '26px',
-                    border: '1px solid rgba(247,244,238,0.5)',
-                    background: '#201f1c',
-                  }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '4px',
-                      top: '4px',
-                      width: '10px',
-                      height: '3px',
-                      background: 'oklch(0.7 0.18 46 / 0.9)',
-                    }}
-                  />
-                </div>
-                <div
-                  style={{
-                    width: '14px',
-                    height: '6px',
-                    background: 'rgba(247,244,238,0.45)',
-                  }}
-                />
-                <div
-                  style={{
-                    width: 0,
-                    height: 0,
-                    borderLeft: '6px solid transparent',
-                    borderRight: '6px solid transparent',
-                    borderTop: '12px solid rgba(247,244,238,0.75)',
-                  }}
-                />
-              </div>
-
-              {/* Printed part on bed */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '38%',
-                  bottom: '12%',
-                  display: 'flex',
-                  flexDirection: 'column-reverse',
-                  alignItems: 'center',
-                  gap: '2px',
-                  transform: 'translateZ(0px)',
-                }}
-              >
-                {[
-                  { w: 52, o: 0.95 },
-                  { w: 44, o: 0.85 },
-                  { w: 34, o: 0.72 },
-                  { w: 24, o: 0.6 },
-                  { w: 14, o: 0.48 },
-                ].map((layer, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      width: `${layer.w}px`,
-                      height: '5px',
-                      background: `oklch(0.64 0.19 45 / ${layer.o})`,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
+            <svg viewBox="0 0 256 256" width="200" height="200" style={{ opacity: 0.8 }}>
+              {/* Simplified printer */}
+              <rect x="40" y="40" width="176" height="176" fill="none" stroke="rgba(247,244,238,0.3)" strokeWidth="2" rx="8" />
+              <rect x="80" y="80" width="96" height="96" fill="none" stroke="rgba(228,99,45,0.4)" strokeWidth="2" />
+              <circle cx="128" cy="100" r="8" fill="rgba(228,99,45,0.6)" />
+              <rect x="100" y="140" width="56" height="12" fill="rgba(228,99,45,0.5)" rx="4" />
+              <line x1="40" y1="180" x2="216" y2="180" stroke="rgba(247,244,238,0.2)" strokeWidth="2" />
+            </svg>
           </div>
 
-          {/* Right: Callouts + progress */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '48px' }}>
+          {/* Right: Status */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '48px', position: 'relative', zIndex: 10 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {[
-                { num: '01', label: 'hotend profile · 0.4 mm' },
-                { num: '02', label: 'build plate · 200 × 200 mm' },
-                { num: '03', label: 'slicing toolpaths', active: true },
-                { num: '04', label: 'g-code export', inactive: true },
-              ].map((item) => (
-                <div
-                  key={item.num}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '14px',
-                    opacity: item.inactive ? 0.5 : 1,
-                  }}
-                >
+              {['hotend profile · 0.4 mm', 'build plate · 200 × 200 mm', 'slicing toolpaths', 'g-code export'].map((label, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px', opacity: i < 3 ? 1 : 0.5 }}>
                   <span
                     style={{
                       width: '28px',
                       height: '28px',
                       borderRadius: '50%',
-                      border:
-                        item.active || item.inactive
-                          ? '1.5px solid rgba(247,244,238,0.5)'
-                          : '1.5px solid oklch(0.7 0.18 46)',
+                      border: `1.5px solid ${i === 2 ? 'oklch(0.7 0.18 46)' : 'rgba(247,244,238,0.5)'}`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontFamily: "'JetBrains Mono', monospace",
+                      fontFamily: 'monospace',
                       fontSize: '11px',
                       fontWeight: 600,
-                      color: item.active
-                        ? 'oklch(0.75 0.16 50)'
-                        : '#f7f4ee',
+                      color: i === 2 ? 'oklch(0.75 0.16 50)' : '#f7f4ee',
                     }}
                   >
-                    {item.num}
+                    {String(i + 1).padStart(2, '0')}
                   </span>
+                  <span style={{ width: '32px', height: '1px', background: 'rgba(247,244,238,0.3)' }} />
                   <span
                     style={{
-                      width: '32px',
-                      height: '1px',
-                      background:
-                        item.active || item.inactive
-                          ? 'rgba(247,244,238,0.3)'
-                          : 'oklch(0.7 0.18 46 / 0.65)',
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontFamily: "'JetBrains Mono', monospace",
+                      fontFamily: 'monospace',
                       fontSize: '13px',
                       letterSpacing: '0.06em',
-                      color: item.active ? '#f7f4ee' : '#ddd5ca',
+                      color: i === 2 ? '#f7f4ee' : '#ddd5ca',
                     }}
                   >
                     {label}
@@ -362,49 +149,21 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
 
             {/* Progress bar */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div
-                style={{
-                  height: '2px',
-                  background: 'rgba(247,244,238,0.14)',
-                  overflow: 'hidden',
-                }}
-              >
+              <div style={{ height: '2px', background: 'rgba(247,244,238,0.14)', overflow: 'hidden' }}>
                 <div
                   style={{
                     height: '100%',
                     background: 'oklch(0.68 0.19 45)',
-                    animation:
-                      'kz-fill 4.2s cubic-bezier(0.2,0.8,0.2,1) infinite',
+                    width: '62%',
+                    animation: 'kz-fill 4.2s cubic-bezier(0.2,0.8,0.2,1) infinite',
                   }}
                 />
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '11px',
-                    letterSpacing: '0.14em',
-                    textTransform: 'uppercase',
-                    color: '#a49c92',
-                  }}
-                >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#a49c92' }}>
                   Initializing…
                 </span>
-                <span
-                  style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: '11px',
-                    letterSpacing: '0.14em',
-                    textTransform: 'uppercase',
-                    color: '#a49c92',
-                  }}
-                >
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#a49c92' }}>
                   v0.0.1
                 </span>
               </div>
@@ -420,7 +179,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
           padding: '0 80px 60px',
           display: 'flex',
           justifyContent: 'space-between',
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily: 'monospace',
           fontSize: '10px',
           letterSpacing: '0.2em',
           textTransform: 'uppercase',
@@ -434,9 +193,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
 
       <style>{`
         @keyframes kz-fill {
-          0% { transform: scaleX(0.04); }
-          70% { transform: scaleX(0.82); }
-          100% { transform: scaleX(0.97); }
+          0% { width: 4%; }
+          70% { width: 82%; }
+          100% { width: 97%; }
         }
       `}</style>
     </div>
