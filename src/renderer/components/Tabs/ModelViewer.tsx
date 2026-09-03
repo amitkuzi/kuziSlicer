@@ -27,6 +27,7 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
   const [fileLoaded, setFileLoaded] = useState(false)
   const [pathInput, setPathInput] = useState('')
   const [pathError, setPathError] = useState<string | null>(null)
+  const [webglError, setWebglError] = useState<string | null>(null)
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -48,8 +49,26 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
     camera.position.z = 50
     cameraRef.current = camera
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
+    // Renderer -- some environments (remote desktop / VM / disabled GPU driver) refuse a
+    // hardware-accelerated context; retry allowing a software fallback before giving up.
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
+    } catch {
+      try {
+        const ctx = canvas.getContext('webgl2', { failIfMajorPerformanceCaveat: false })
+          || canvas.getContext('webgl', { failIfMajorPerformanceCaveat: false })
+        if (!ctx) throw new Error('No WebGL context available')
+        renderer = new THREE.WebGLRenderer({ canvas, context: ctx as WebGLRenderingContext, antialias: true })
+      } catch (err) {
+        console.error('WebGL initialization failed:', err)
+        setWebglError(
+          'WebGL is unavailable in this environment (GPU/driver issue), so the 3D preview cannot run. ' +
+          'G-code generation and printer/filament selection are unaffected.'
+        )
+        return
+      }
+    }
     renderer.setSize(canvas.clientWidth, canvas.clientHeight)
     renderer.setPixelRatio(window.devicePixelRatio)
     rendererRef.current = renderer
@@ -307,7 +326,17 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
       <div className="flex-1 relative">
         <canvas ref={canvasRef} className="w-full h-full" />
 
-        {!fileLoaded && (
+        {webglError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-ground">
+            <div className="text-center max-w-md px-6">
+              <div className="text-6xl mb-4">⚠️</div>
+              <h3 className="text-xl font-semibold text-fg mb-2">3D Preview Unavailable</h3>
+              <p className="text-fg2 text-sm">{webglError}</p>
+            </div>
+          </div>
+        )}
+
+        {!webglError && !fileLoaded && (
           <div className="absolute inset-0 flex items-center justify-center bg-ground/50">
             <div className="text-center">
               <div className="text-6xl mb-4">📦</div>

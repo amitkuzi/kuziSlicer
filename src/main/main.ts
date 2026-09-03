@@ -319,6 +319,12 @@ function createWindow() {
     console.error('[Main] Page failed to load:', errorCode, errorDescription)
   })
 
+  if (isDev) {
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      console.log(`[Renderer:${level}] ${message} (${sourceId}:${line})`)
+    })
+  }
+
   mainWindow.webContents.on('crashed', () => {
     console.error('[Main] Renderer process crashed')
   })
