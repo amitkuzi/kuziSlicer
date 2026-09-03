@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>kuziSlicer Profiles Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section h2 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            background: #f9f9f9;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        .card h3 {
+            color: #667eea;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .card p {
+            color: #666;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .code {
+            background: #f0f0f0;
+            border-left: 3px solid #667eea;
+            padding: 10px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            border-radius: 4px;
+            color: #333;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .feature-box {
+            padding: 15px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature-box h4 {
+            color: #667eea;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .feature-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .feature-box li {
+            color: #666;
+            font-size: 12px;
+            padding: 3px 0;
+        }
+
+        .feature-box li:before {
+            content: "✓ ";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status.ready {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.test {
+            background: #cfe2ff;
+            color: #084298;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎚️ kuziSlicer Profiles Manager</h1>
+            <p>Export, import, and manage printer & filament profiles</p>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <h2>📋 Overview <span class="status ready">Ready</span></h2>
+                <p>The Profiles Manager feature enables seamless exchange of printer and filament configurations across your kuziSlicer installations.</p>
+
+                <div class="features">
+                    <div class="feature-box">
+                        <h4>Export to YAML</h4>
+                        <ul>
+                            <li>Save all profiles locally</li>
+                            <li>Share via GitHub/cloud</li>
+                            <li>Backup configurations</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-box">
+                        <h4>Import from Multiple Sources</h4>
+                        <ul>
+                            <li>Local YAML files</li>
+                            <li>GitHub repositories</li>
+                            <li>Any HTTPS URL</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-box">
+                        <h4>Profile Types</h4>
+                        <ul>
+                            <li>Printer profiles</li>
+                            <li>Filament profiles</li>
+                            <li>Extensible format</li>
+                        </ul>
+                    </div>
+
+                    <div class="feature-box">
+                        <h4>Merge Modes</h4>
+                        <ul>
+                            <li>Merge (keep existing)</li>
+                            <li>Replace (overwrite)</li>
+                            <li>No deps required</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🔌 IPC Handlers</h2>
+                <p>5 new Electron IPC channels expose the profiles API to the renderer process:</p>
+
+                <div class="grid">
+                    <div class="card">
+                        <h3>profiles:export-yaml</h3>
+                        <p>Export all profiles to a YAML file and save locally.</p>
+                        <div class="code">await invoke('profiles:export-yaml', targetPath?)</div>
+                    </div>
+
+                    <div class="card">
+                        <h3>profiles:import-file</h3>
+                        <p>Load profiles from a local YAML file.</p>
+                        <div class="code">await invoke('profiles:import-file', filePath)</div>
+                    </div>
+
+                    <div class="card">
+                        <h3>profiles:import-github</h3>
+                        <p>Clone profiles from a GitHub repository.</p>
+                        <div class="code">await invoke('profiles:import-github', owner, repo, branch?, filePath?)</div>
+                    </div>
+
+                    <div class="card">
+                        <h3>profiles:import-url</h3>
+                        <p>Fetch profiles from any HTTPS URL.</p>
+                        <div class="code">await invoke('profiles:import-url', url)</div>
+                    </div>
+
+                    <div class="card">
+                        <h3>profiles:merge</h3>
+                        <p>Combine imported profiles with existing ones.</p>
+                        <div class="code">await invoke('profiles:merge', imported, overwrite?)</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>💾 ProfilesManager Service</h2>
+                <p><code>src/main/services/profilesManager.ts</code> — Core service implementing all profile operations.</p>
+
+                <div class="code" style="margin: 15px 0;">
+static exportToYaml(printers, filaments): string
+static saveProfilesYaml(filePath, printers, filaments): void
+static importFromFile(filePath): {printers, filaments}
+static importFromGithub(owner, repo, branch?, filePath?): Promise
+static importFromUrl(url): Promise
+static mergeProfiles(existing, imported, overwrite?): {printers, filaments}
+                </div>
+
+                <p style="margin-top: 15px; color: #666; font-size: 13px;">
+                    <strong>Key features:</strong>
+                </p>
+                <ul style="margin-left: 20px; color: #666; font-size: 13px; line-height: 1.8;">
+                    <li>✓ Hand-coded YAML parser (no external deps)</li>
+                    <li>✓ HTTPS support for GitHub and URL imports</li>
+                    <li>✓ Merge with collision detection (by ID)</li>
+                    <li>✓ Extensible for new profile types</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h2>📚 Documentation & Examples</h2>
+
+                <div class="grid">
+                    <div class="card">
+                        <h3>PROFILES-GUIDE.md</h3>
+                        <p>Complete reference with usage examples for all features and profile types.</p>
+                    </div>
+
+                    <div class="card">
+                        <h3>profiles.example.yaml</h3>
+                        <p>Template file with 3 printer profiles and 5 filament configurations.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🚀 Getting Started</h2>
+
+                <div class="feature-box">
+                    <h4>1. Export Your Profiles</h4>
+                    <div class="code" style="margin: 10px 0;">
+import { profilesApi } from './utils/profilesApi'
+
+const result = await profilesApi.exportYaml()
+console.log('Profiles saved to:', result.path)
+                    </div>
+                </div>
+
+                <div class="feature-box">
+                    <h4>2. Import from GitHub</h4>
+                    <div class="code" style="margin: 10px 0;">
+const profiles = await profilesApi.importFromGithub(
+  'your-username',
+  'profiles-repo',
+  'main'
+)
+                    </div>
+                </div>
+
+                <div class="feature-box">
+                    <h4>3. Merge with Existing</h4>
+                    <div class="code" style="margin: 10px 0;">
+const merged = await profilesApi.mergeProfiles(profiles, false)
+// false = merge only new profiles, keep existing
+// true = replace all profiles
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>✅ Verification</h2>
+                <p>Run <code>node verify-profiles.js</code> to check that all components are in place.</p>
+                <p style="margin-top: 15px; color: #666; font-size: 13px;">All files created and IPC handlers implemented. Ready to integrate into the kuziSlicer UI!</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
