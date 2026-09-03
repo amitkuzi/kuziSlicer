@@ -288,14 +288,21 @@ ipcMain.handle('profiles:merge', async (_event, imported: { printers: PrinterPro
 
 function createWindow() {
   console.log('Creating window... isDev:', isDev)
-  const iconPath = path.join(__dirname, '..', '..', 'brandkit', 'icons', 'kuzislicer', 'icon.svg')
+
+  const getIconPath = () => {
+    const devPath = path.join(process.cwd(), 'brandkit/icons/kuzislicer/icon-1024.png')
+    const prodPath = path.join(process.resourcesPath, 'brandkit/icons/kuzislicer/icon-1024.png')
+    if (fs.existsSync(devPath)) return devPath
+    if (fs.existsSync(prodPath)) return prodPath
+    return undefined
+  }
 
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 1000,
     minHeight: 600,
-    icon: iconPath,
+    icon: getIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
