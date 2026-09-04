@@ -13,6 +13,16 @@ let pluginHostClient: PluginHostClient | null = null
 let pluginManager: PluginManager | null = null
 
 const isDev = process.env.NODE_ENV === 'development'
+
+// Some GPU drivers crash Chromium's GPU process outright (STATUS_STACK_BUFFER_OVERRUN,
+// exit_code -1073740791) rather than just failing to provide hardware acceleration --
+// seen on both the dev sandbox and a real Windows 11 machine. Force ANGLE onto the
+// bundled SwiftShader software renderer so WebGL (the 3D model/toolpath preview) works
+// without touching the native driver at all.
+app.disableHardwareAcceleration()
+app.commandLine.appendSwitch('use-angle', 'swiftshader')
+app.commandLine.appendSwitch('disable-gpu-compositing')
+
 const userDataPath = app.getPath('userData')
 const printersDataPath = path.join(userDataPath, 'printers.json')
 const settingsDataPath = path.join(userDataPath, 'settings.json')
