@@ -21,6 +21,7 @@
     "test:overrideengine": "node scripts/test-overrideEngine.mjs",
     "test:gcodepipeline": "node scripts/test-gcodePipeline.mjs",
     "test:gcodevalidation": "node scripts/test-gcodeValidation.mjs",
+    "test:elegooslicer": "node scripts/test-elegooSlicer.mjs",
     "test:bambupackaging": "node scripts/test-bambuPackaging.mjs",
     "start": "cross-env NODE_ENV=production electron .",
     "pack": "npm run build && electron-builder --dir",
