@@ -226,7 +226,9 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
 
     setGenerating(true)
     try {
-      const gcode = (await window.electron.invoke(
+      // gcode:generate writes the result to a temp file and returns its path
+      // (avoids marshaling a potentially huge string over IPC) -- read it back.
+      const gcodeFilePath = (await window.electron.invoke(
         'gcode:generate',
         modelPath,
         printer.name,
@@ -239,7 +241,15 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
           fanSpeed: 100,
         }
       )) as string
-      onGenerateGcode?.(gcode)
+      const read = (await window.electron.invoke('file:read', gcodeFilePath)) as {
+        success: boolean
+        content?: string
+        error?: string
+      }
+      if (!read.success || read.content === undefined) {
+        throw new Error(read.error || `Could not read generated G-code from ${gcodeFilePath}`)
+      }
+      onGenerateGcode?.(read.content)
     } catch (e) {
       console.error('Failed to generate G-code:', e)
       alert(`Error generating G-code: ${String(e)}`)
