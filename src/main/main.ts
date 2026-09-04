@@ -9,6 +9,7 @@ import PluginManager from './services/pluginManager'
 import ProfilesManager from './services/profilesManager'
 import ProfilesAccessor from './services/profilesAccessor'
 import { ConfiguredPrinter } from '../types/ipc'
+import GcodeValidationEngine from './services/engines/gcodeValidationEngine'
 
 let mainWindow: BrowserWindow | null = null
 let pluginHostClient: PluginHostClient | null = null
@@ -155,6 +156,10 @@ ipcMain.handle('printer:bambu-print', async (_event, data: { ip: string; accessC
 })
 
 ipcMain.handle('printer:elegoo-print', async (_event, data: { ip: string; gcode: string; fileName: string }) => {
+  const validation = GcodeValidationEngine.validateForPrint(data.gcode)
+  if (!validation.valid) {
+    return { success: false, message: `Print blocked by G-code safety checks: ${validation.errors.join(' ')}` }
+  }
   return ElegooPrinterClient.uploadAndPrint({
     ip: data.ip,
     gcode: data.gcode,

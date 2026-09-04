@@ -27,7 +27,11 @@ import * as crypto from 'crypto'
 import { randomUUID } from 'crypto'
 
 const DISCOVERY_PORT = 3000
-const WS_PORT = 3030
+// Port 3030 (from pycentauri/opencentauri docs) accepts the TCP handshake but is
+// flaky/unstable in practice against real hardware (V0.4.0-o) -- confirmed by the
+// printer's own official web dashboard, which connects to ws://<ip>/websocket on
+// the main HTTP port instead and works reliably. Use that path.
+const WS_PORT = 80
 const UPLOAD_PORT = 80
 const CAMERA_PORT = 3031
 const CHUNK_SIZE = 1024 * 1024 // 1 MiB

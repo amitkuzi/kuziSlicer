@@ -9,6 +9,7 @@ import PluginHostClient from './clients/pluginHostClient'
 import StlEngine from './engines/stlEngine'
 import GcodeEngine from './engines/gcodeEngine'
 import ProfilesManager, { ProfilesData } from './profilesManager'
+import ElegooSlicerService from './elegooSlicerService'
 
 export interface PrinterProfile {
   id: string
@@ -68,6 +69,17 @@ export class GcodeGenerator {
    * Future: call PluginHost for Phase 1 slicing (Arachne engine).
    */
   static async generate(options: GcodeGeneratorOptions): Promise<string> {
+    if (ElegooSlicerService.supports(options.printerProfile.id)) {
+      const outputDirectory = path.join(app.getPath('temp'), 'kuziSlicer', `slice-${Date.now()}`)
+      const outputPath = await ElegooSlicerService.slice({
+        modelPath: options.modelPath,
+        outputDirectory,
+        nozzleSize: options.printerProfile.nozzleSize,
+        filamentMaterial: options.filamentProfile.material,
+      })
+      return require('fs').readFileSync(outputPath, 'utf-8')
+    }
+
     // Parse STL
     let geometry
     try {
