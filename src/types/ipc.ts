@@ -85,6 +85,7 @@ export type InvokeChannels = {
   'profiles:import-github': (owner: string, repo: string, branch?: string, filePath?: string) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
   'profiles:import-url': (url: string) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
   'profiles:merge': (imported: { printers: PrinterProfile[]; filaments: FilamentProfile[] }, overwrite: boolean) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
+  'printer:bambu-print': (data: { ip: string; accessCode: string; serialNumber: string; gcode: string; fileName: string }) => Promise<{ success: boolean; message: string }>
 }
 
 // Send channels (fire and forget)

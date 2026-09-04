@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electron', {
       'profiles:import-github',
       'profiles:import-url',
       'profiles:merge',
+      'printer:bambu-print',
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)

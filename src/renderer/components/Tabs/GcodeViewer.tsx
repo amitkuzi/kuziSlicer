@@ -1,12 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import * as THREE from 'three'
-
-interface PrinterInfo {
-  id: string
-  name: string
-  ip: string
-  status: 'online' | 'offline' | 'printing'
-}
+import { ConfiguredPrinter } from '../../../types/ipc'
 
 interface GcodeStats {
   lines: number
@@ -23,8 +17,10 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
   useEffect(() => {
     if (gcode) setCode(gcode)
   }, [gcode])
-  const [printers, setPrinters] = useState<PrinterInfo[]>([])
+  const [printers, setPrinters] = useState<ConfiguredPrinter[]>([])
   const [selectedPrinter, setSelectedPrinter] = useState<string>('')
+  const [bambuAccessCode, setBambuAccessCode] = useState('')
+  const [bambuSerialNumber, setBambuSerialNumber] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -166,7 +162,7 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
     const fetchPrinters = async () => {
       try {
         // Try to get configured printers (added by user in PrinterManagement)
-        const result = (await (window as any).electron.invoke('printer:configured:list')) as PrinterInfo[]
+        const result = (await (window as any).electron.invoke('printer:configured:list')) as ConfiguredPrinter[]
         setPrinters(result)
         if (result.length > 0) {
           setSelectedPrinter(result[0].id)
@@ -210,44 +206,64 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
     document.body.removeChild(element)
   }
 
+  const isBambuPrinter = (printer?: ConfiguredPrinter) =>
+    !!printer && /bambu/i.test(`${printer.name} ${printer.model}`)
+
+  const selectedPrinterObj = printers.find((p) => p.id === selectedPrinter)
+
   const handleSendToPrinter = async () => {
     if (!selectedPrinter || !code) {
       setMessage({ type: 'error', text: 'Please select a printer and load G-code' })
       return
     }
 
+    const printer = selectedPrinterObj
+    if (isBambuPrinter(printer)) {
+      if (!printer?.ipAddress) {
+        setMessage({ type: 'error', text: 'This printer has no IP address configured (Printer Management tab).' })
+        return
+      }
+      if (!bambuAccessCode.trim() || !bambuSerialNumber.trim()) {
+        setMessage({ type: 'error', text: 'Enter the printer\'s Access Code and Serial Number (LAN Only Mode screen on the printer).' })
+        return
+      }
+    }
+
     setIsUploading(true)
     setUploadProgress(0)
 
     try {
-      // Simulate progress
       const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval)
-            return prev
-          }
-          return prev + Math.random() * 30
-        })
+        setUploadProgress((prev) => (prev >= 90 ? prev : prev + Math.random() * 30))
       }, 200)
 
-      const printer = printers.find((p) => p.id === selectedPrinter)
-      const result = (await (window as any).electron.invoke('gcode:send', {
-        printer: selectedPrinter,
-        gcode: code,
-      })) as { success: boolean; message: string }
+      let result: { success: boolean; message: string }
+      if (isBambuPrinter(printer)) {
+        result = (await (window as any).electron.invoke('printer:bambu-print', {
+          ip: printer!.ipAddress,
+          accessCode: bambuAccessCode.trim(),
+          serialNumber: bambuSerialNumber.trim(),
+          gcode: code,
+          fileName: 'kuziSlicer_print.gcode',
+        })) as { success: boolean; message: string }
+      } else {
+        result = (await (window as any).electron.invoke('gcode:send', {
+          printer: selectedPrinter,
+          gcode: code,
+        })) as { success: boolean; message: string }
+      }
 
       clearInterval(progressInterval)
       setUploadProgress(100)
 
       if (result.success) {
-        setMessage({ type: 'success', text: `Print started on ${printer?.name || 'printer'}` })
-        setTimeout(() => setMessage(null), 3000)
+        setMessage({ type: 'success', text: result.message || `Print started on ${printer?.name || 'printer'}` })
+        setTimeout(() => setMessage(null), 5000)
       } else {
         setMessage({ type: 'error', text: result.message })
       }
     } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to send to printer' })
+      setMessage({ type: 'error', text: `Failed to send to printer: ${String(err)}` })
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
@@ -318,6 +334,26 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
               </button>
             </div>
           </div>
+
+          {isBambuPrinter(selectedPrinterObj) && (
+            <div className="px-3 py-2 border-b border-fg2/10 flex items-center gap-2 bg-ground/50">
+              <span className="text-xs text-fg2">LAN Only Mode (printer screen &rarr; Network):</span>
+              <input
+                type="text"
+                value={bambuAccessCode}
+                onChange={(e) => setBambuAccessCode(e.target.value)}
+                placeholder="Access Code"
+                className="px-2 py-1 text-xs bg-raised text-fg rounded border border-fg2/20 w-28"
+              />
+              <input
+                type="text"
+                value={bambuSerialNumber}
+                onChange={(e) => setBambuSerialNumber(e.target.value)}
+                placeholder="Serial Number"
+                className="px-2 py-1 text-xs bg-raised text-fg rounded border border-fg2/20 w-40"
+              />
+            </div>
+          )}
 
           {/* Progress bar */}
           {isUploading && (

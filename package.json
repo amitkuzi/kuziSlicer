@@ -20,12 +20,16 @@
     "test:pluginmanager": "node scripts/test-pluginManager.mjs",
     "test:overrideengine": "node scripts/test-overrideEngine.mjs",
     "test:gcodepipeline": "node scripts/test-gcodePipeline.mjs",
+    "test:bambupackaging": "node scripts/test-bambuPackaging.mjs",
     "start": "cross-env NODE_ENV=production electron .",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "axios": "^1.6.0",
+    "basic-ftp": "^6.2.1",
+    "fflate": "^0.8.3",
+    "mqtt": "^5.15.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "three": "^0.185.1"

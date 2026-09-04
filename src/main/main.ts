@@ -3,6 +3,7 @@ import path from 'path'
 import * as fs from 'fs'
 import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings } from './services/gcodeGenerator'
 import PluginHostClient from './clients/pluginHostClient'
+import BambuPrinterClient from './clients/bambuPrinterClient'
 import PluginManager from './services/pluginManager'
 import ProfilesManager from './services/profilesManager'
 import ProfilesAccessor from './services/profilesAccessor'
@@ -140,6 +141,16 @@ ipcMain.handle('gcode:send', async (_event, data: { printer: string; gcode: stri
   // via the printer's own SD card / app in the meantime.
   console.warn(`[Main] gcode:send not implemented -- printer network control is not built yet (requested printer: ${data.printer})`)
   return { success: false, message: 'Sending to a printer over the network is not implemented yet. Use Download and load the .gcode file on the printer directly.' }
+})
+
+ipcMain.handle('printer:bambu-print', async (_event, data: { ip: string; accessCode: string; serialNumber: string; gcode: string; fileName: string }) => {
+  return BambuPrinterClient.uploadAndPrint({
+    ip: data.ip,
+    accessCode: data.accessCode,
+    serialNumber: data.serialNumber,
+    gcode: data.gcode,
+    fileName: data.fileName || `kuziSlicer_print_${Date.now()}.gcode`,
+  })
 })
 
 ipcMain.handle('settings:get', (_event, key: string) => loadSettings()[key])
