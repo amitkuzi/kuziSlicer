@@ -128,8 +128,8 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
       model = new THREE.Group()
       model.add(mesh)
     } else if (lower.endsWith('.3mf')) {
-      const result = await new ThreeMFLoader().parseAsync(arrayBuffer)
-      model = result
+      // ThreeMFLoader only exposes a synchronous parse() -- no parseAsync in this version.
+      model = new ThreeMFLoader().parse(arrayBuffer)
     } else {
       throw new Error('Unsupported file format. Please use .stl or .3mf')
     }
