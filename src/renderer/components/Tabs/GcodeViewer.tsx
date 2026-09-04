@@ -21,6 +21,8 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
   const [selectedPrinter, setSelectedPrinter] = useState<string>('')
   const [bambuAccessCode, setBambuAccessCode] = useState('')
   const [bambuSerialNumber, setBambuSerialNumber] = useState('')
+  const [elegooSnapshot, setElegooSnapshot] = useState<string | null>(null)
+  const [snapshotLoading, setSnapshotLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -209,6 +211,9 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
   const isBambuPrinter = (printer?: ConfiguredPrinter) =>
     !!printer && /bambu/i.test(`${printer.name} ${printer.model}`)
 
+  const isElegooPrinter = (printer?: ConfiguredPrinter) =>
+    !!printer && /elegoo|centauri/i.test(`${printer.name} ${printer.model}`)
+
   const selectedPrinterObj = printers.find((p) => p.id === selectedPrinter)
 
   const handleSendToPrinter = async () => {
@@ -228,6 +233,10 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
         return
       }
     }
+    if (isElegooPrinter(printer) && !printer?.ipAddress) {
+      setMessage({ type: 'error', text: 'This printer has no IP address configured (Printer Management tab).' })
+      return
+    }
 
     setIsUploading(true)
     setUploadProgress(0)
@@ -243,6 +252,12 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
           ip: printer!.ipAddress,
           accessCode: bambuAccessCode.trim(),
           serialNumber: bambuSerialNumber.trim(),
+          gcode: code,
+          fileName: 'kuziSlicer_print.gcode',
+        })) as { success: boolean; message: string }
+      } else if (isElegooPrinter(printer)) {
+        result = (await (window as any).electron.invoke('printer:elegoo-print', {
+          ip: printer!.ipAddress,
           gcode: code,
           fileName: 'kuziSlicer_print.gcode',
         })) as { success: boolean; message: string }
@@ -267,6 +282,25 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
+    }
+  }
+
+  const handleCaptureSnapshot = async () => {
+    if (!selectedPrinterObj?.ipAddress) return
+    setSnapshotLoading(true)
+    try {
+      const result = (await (window as any).electron.invoke('printer:elegoo-snapshot', {
+        ip: selectedPrinterObj.ipAddress,
+      })) as { success: boolean; dataUrl?: string; message?: string }
+      if (result.success && result.dataUrl) {
+        setElegooSnapshot(result.dataUrl)
+      } else {
+        setMessage({ type: 'error', text: result.message || 'Failed to capture camera snapshot' })
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: `Failed to capture camera snapshot: ${String(err)}` })
+    } finally {
+      setSnapshotLoading(false)
     }
   }
 
@@ -352,6 +386,22 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
                 placeholder="Serial Number"
                 className="px-2 py-1 text-xs bg-raised text-fg rounded border border-fg2/20 w-40"
               />
+            </div>
+          )}
+
+          {isElegooPrinter(selectedPrinterObj) && (
+            <div className="px-3 py-2 border-b border-fg2/10 flex items-center gap-2 bg-ground/50">
+              <span className="text-xs text-fg2">SDCP LAN printing (no access code needed):</span>
+              <button
+                onClick={handleCaptureSnapshot}
+                disabled={snapshotLoading || !selectedPrinterObj?.ipAddress}
+                className="px-2 py-1 text-xs bg-brass text-base rounded hover:bg-brass/90 disabled:bg-fg2/20"
+              >
+                {snapshotLoading ? 'Capturing...' : 'Camera Snapshot'}
+              </button>
+              {elegooSnapshot && (
+                <img src={elegooSnapshot} alt="Printer camera snapshot" className="h-12 rounded border border-fg2/20" />
+              )}
             </div>
           )}
 

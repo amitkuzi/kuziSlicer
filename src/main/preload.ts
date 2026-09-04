@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('electron', {
       'profiles:import-url',
       'profiles:merge',
       'printer:bambu-print',
+      'printer:elegoo-print',
+      'printer:elegoo-snapshot',
     ]
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args)

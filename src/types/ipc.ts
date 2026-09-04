@@ -86,6 +86,8 @@ export type InvokeChannels = {
   'profiles:import-url': (url: string) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
   'profiles:merge': (imported: { printers: PrinterProfile[]; filaments: FilamentProfile[] }, overwrite: boolean) => Promise<{ success: boolean; printers?: PrinterProfile[]; filaments?: FilamentProfile[]; error?: string }>
   'printer:bambu-print': (data: { ip: string; accessCode: string; serialNumber: string; gcode: string; fileName: string }) => Promise<{ success: boolean; message: string }>
+  'printer:elegoo-print': (data: { ip: string; gcode: string; fileName: string }) => Promise<{ success: boolean; message: string }>
+  'printer:elegoo-snapshot': (data: { ip: string }) => Promise<{ success: boolean; dataUrl?: string; message?: string }>
 }
 
 // Send channels (fire and forget)
