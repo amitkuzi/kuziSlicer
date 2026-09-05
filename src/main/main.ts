@@ -4,7 +4,7 @@ import * as fs from 'fs'
 import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings } from './services/gcodeGenerator'
 import PluginHostClient from './clients/pluginHostClient'
 import BambuPrinterClient from './clients/bambuPrinterClient'
-import ElegooPrinterClient from './clients/elegooPrinterClient'
+import elegooCentauriCarbon from '../plugins/extensions/plugins/elegoo-centauri-carbon/src/index'
 import PluginManager from './services/pluginManager'
 import ProfilesManager from './services/profilesManager'
 import ProfilesAccessor from './services/profilesAccessor'
@@ -155,16 +155,19 @@ ipcMain.handle('printer:bambu-print', async (_event, data: { ip: string; accessC
 })
 
 ipcMain.handle('printer:elegoo-print', async (_event, data: { ip: string; gcode: string; fileName: string }) => {
-  return ElegooPrinterClient.uploadAndPrint({
-    ip: data.ip,
-    gcode: data.gcode,
-    fileName: data.fileName || `kuziSlicer_print_${Date.now()}.gcode`,
-  })
+  const conn = { ip: data.ip }
+  const fileName = data.fileName || `kuziSlicer_print_${Date.now()}.gcode`
+  try {
+    const { remoteFileName } = await elegooCentauriCarbon.uploadFile(conn, data.gcode, fileName)
+    return elegooCentauriCarbon.startPrint(conn, remoteFileName)
+  } catch (err) {
+    return { success: false, message: err instanceof Error ? err.message : String(err) }
+  }
 })
 
 ipcMain.handle('printer:elegoo-snapshot', async (_event, data: { ip: string }) => {
   try {
-    const buffer = await ElegooPrinterClient.captureSnapshot(data.ip)
+    const buffer = await elegooCentauriCarbon.captureSnapshot!({ ip: data.ip })
     return { success: true, dataUrl: `data:image/jpeg;base64,${buffer.toString('base64')}` }
   } catch (err) {
     return { success: false, message: err instanceof Error ? err.message : String(err) }
