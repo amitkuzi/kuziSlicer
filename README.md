@@ -1,43 +1,41 @@
-# kuziSlicer VSCode Extension
+# kuziSlicer
 
-A VSCode extension for kuziSlicer.
+kuziSlicer is an Electron desktop application for loading 3D models, slicing them, previewing G-code, and sending validated jobs to supported printers on a trusted LAN.
 
-## Getting Started
+## Elegoo Centauri Carbon support
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+The Centauri Carbon path uses the installed official ElegooSlicer engine and its official 0.4 mm nozzle, 0.20 mm Standard, and material profiles. The old internal generator is a prototype and its output is deliberately blocked from direct Elegoo printing.
 
-2. Compile TypeScript:
-   ```bash
-   npm run compile
-   ```
+Requirements:
 
-3. Debug the extension:
-   - Open the project in VSCode
-   - Press `F5` to launch the extension in debug mode
-   - Run the `kuziSlicer: Hello World` command from the command palette (Ctrl+Shift+P / Cmd+Shift+P)
+- Windows with ElegooSlicer installed in `C:\Program Files\ElegooSlicer`
+- Elegoo Centauri Carbon with a 0.4 mm nozzle
+- Generic or Elegoo PLA, PETG, ABS, ASA, TPU 95A, or PC matching an installed official profile; Generic Nylon uses ElegooSlicer's Generic PA profile
+- Printer and computer on the same trusted LAN
 
-## Project Structure
+Workflow:
 
-- `src/extension.ts` - Extension entry point
-- `package.json` - Extension manifest and dependencies
-- `tsconfig.json` - TypeScript compiler options
-- `.vscode/` - Debug and editor configuration
-- `dist/` - Compiled JavaScript output (generated)
+1. Run `npm install` and `npm run dev` (use `npm.cmd` if PowerShell blocks `npm.ps1`).
+2. In Printer Management, add the Elegoo Centauri Carbon, its IPv4 address, and port `80`; use Test Connection.
+3. Load an STL in the 3D Viewer.
+4. Select `Elegoo Centauri Carbon` and a PLA filament, then generate G-code.
+5. Review the G-code and click Print. Keep the bed clear and supervise the first layer.
 
-## Available Commands
+Direct printing validates that the file contains heating, motion, and extrusion commands and rejects prototype output and embedded `BED_MESH_CALIBRATE` commands.
 
-- `kuziSlicer.helloWorld` - Shows an information message
+## Development
 
-## Build & Watch
+```powershell
+npm.cmd run build
+npm.cmd run test:gcodepipeline
+npm.cmd run test:gcodevalidation
+npm.cmd run test:elegooslicer
+```
 
-- Compile once: `npm run compile`
-- Watch for changes: `npm run watch`
+The last test invokes the locally installed official ElegooSlicer and verifies real Centauri Carbon G-code output.
 
-## Next Steps
+## Current limitations
 
-- S2: Integrate brandkit via script
-- S3: Build splash screen UI
-- S4: Set up npm scripts/Makefile
+- Verified direct slicing is currently limited to STL, a 0.4 mm nozzle, the 0.20 mm Standard process, and installed official Elegoo material profiles.
+- The legacy internal generator remains available for development profiles but is not production-grade slicing.
+- LAN printing depends on printer firmware behavior; confirm firmware/profile compatibility and test with a small model first.

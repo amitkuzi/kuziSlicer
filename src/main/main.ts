@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import * as fs from 'fs'
+import * as net from 'net'
 import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings } from './services/gcodeGenerator'
 import PluginHostClient from './clients/pluginHostClient'
 import BambuPrinterClient from './clients/bambuPrinterClient'
@@ -25,6 +26,14 @@ const isDev = process.env.NODE_ENV === 'development'
 app.disableHardwareAcceleration()
 app.commandLine.appendSwitch('use-angle', 'swiftshader')
 app.commandLine.appendSwitch('disable-gpu-compositing')
+
+// Use a per-user writable cache location. Some Windows installations deny
+// Chromium access to its inferred cache directory, which produces noisy cache
+// and GPU cache failures even though the application itself still starts.
+const cachePath = path.join(app.getPath('temp'), 'kuziSlicer', 'chromium-cache')
+fs.mkdirSync(cachePath, { recursive: true })
+app.setPath('cache', cachePath)
+app.commandLine.appendSwitch('disk-cache-dir', cachePath)
 
 const userDataPath = app.getPath('userData')
 const printersDataPath = path.join(userDataPath, 'printers.json')
@@ -160,10 +169,13 @@ ipcMain.handle('printer:elegoo-print', async (_event, data: { ip: string; gcode:
   if (!validation.valid) {
     return { success: false, message: `Print blocked by G-code safety checks: ${validation.errors.join(' ')}` }
   }
+  const uniqueFileName = `kuziSlicer_${Date.now()}_${validation.layerCount}L.gcode`
   return ElegooPrinterClient.uploadAndPrint({
     ip: data.ip,
     gcode: data.gcode,
-    fileName: data.fileName || `kuziSlicer_print_${Date.now()}.gcode`,
+    // Never overwrite a previous remote name: the CC1 file index can retain
+    // stale layer/thumbnail metadata for an in-place replacement.
+    fileName: uniqueFileName,
   })
 })
 
@@ -212,9 +224,23 @@ ipcMain.handle('printer:configured:delete', (_event, id: string) => {
   saveConfiguredPrinters(loadConfiguredPrinters().filter((p) => p.id !== id))
 })
 
-ipcMain.handle('printer:test-connection', (_event, _ipAddress: string) => {
-  // Phase 3: test real connection. For now, stub.
-  return true
+ipcMain.handle('printer:test-connection', (_event, ipAddress: string, port?: string) => {
+  const numericPort = Number(port || 80)
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ipAddress) || !Number.isInteger(numericPort) || numericPort < 1 || numericPort > 65535) {
+    return false
+  }
+  return new Promise<boolean>((resolve) => {
+    const socket = net.createConnection({ host: ipAddress, port: numericPort })
+    const finish = (connected: boolean) => {
+      socket.removeAllListeners()
+      socket.destroy()
+      resolve(connected)
+    }
+    socket.setTimeout(3000)
+    socket.once('connect', () => finish(true))
+    socket.once('timeout', () => finish(false))
+    socket.once('error', () => finish(false))
+  })
 })
 
 // ============================================================

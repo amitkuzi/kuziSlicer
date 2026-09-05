@@ -25,13 +25,10 @@ import axios from 'axios'
 import FormData from 'form-data'
 import * as crypto from 'crypto'
 import { randomUUID } from 'crypto'
+import * as path from 'path'
 
 const DISCOVERY_PORT = 3000
-// Port 3030 (from pycentauri/opencentauri docs) accepts the TCP handshake but is
-// flaky/unstable in practice against real hardware (V0.4.0-o) -- confirmed by the
-// printer's own official web dashboard, which connects to ws://<ip>/websocket on
-// the main HTTP port instead and works reliably. Use that path.
-const WS_PORT = 80
+const WS_PORT = 3030
 const UPLOAD_PORT = 80
 const CAMERA_PORT = 3031
 const CHUNK_SIZE = 1024 * 1024 // 1 MiB
@@ -48,6 +45,35 @@ export interface ElegooPrintResult {
 }
 
 export class ElegooPrinterClient {
+  /** Build the verified CC1 SDCP start-print request without sending it. */
+  static buildStartPrintPacket(
+    mainboardId: string,
+    remoteFileName: string,
+    requestId = randomUUID().replace(/-/g, '').slice(0, 16),
+    timestamp = Date.now()
+  ): Record<string, unknown> {
+    return {
+      Id: mainboardId,
+      Data: {
+        Cmd: 128,
+        Data: {
+          Filename: remoteFileName,
+          StartLayer: 0,
+          Calibration_switch: 1,
+          PrintPlatformType: 0,
+          Tlp_Switch: 0,
+          slot_map: [],
+          path_prefix: '/local',
+        },
+        RequestID: requestId,
+        MainboardID: mainboardId,
+        TimeStamp: timestamp,
+        From: 1,
+      },
+      Topic: `sdcp/request/${mainboardId}`,
+    }
+  }
+
   /**
    * Discover a printer at a known IP: unicast the SDCP probe directly
    * (skips broadcast discovery since the IP is already known) and parse the
@@ -90,6 +116,9 @@ export class ElegooPrinterClient {
    * filename to pass to startPrint.
    */
   static async uploadFile(ip: string, gcode: string, fileName: string): Promise<string> {
+    if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) throw new Error('Printer IP address is invalid.')
+    const safeFileName = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')
+    if (!safeFileName.toLowerCase().endsWith('.gcode')) throw new Error('Elegoo uploads must use a .gcode filename.')
     const buffer = Buffer.from(gcode, 'utf-8')
     const md5 = crypto.createHash('md5').update(buffer).digest('hex')
     const uploadId = randomUUID().replace(/-/g, '')
@@ -104,7 +133,7 @@ export class ElegooPrinterClient {
       form.append('Offset', String(offset))
       form.append('Uuid', uploadId)
       form.append('TotalSize', String(total))
-      form.append('File', chunk, { filename: fileName, contentType: 'application/octet-stream' })
+      form.append('File', chunk, { filename: safeFileName, contentType: 'application/octet-stream' })
 
       const resp = await axios.post(url, form, {
         headers: form.getHeaders(),
@@ -117,7 +146,7 @@ export class ElegooPrinterClient {
       }
     }
 
-    return fileName
+    return safeFileName
   }
 
   // Official SDCP_PRINT_CTRL_ACK_* codes for the Cmd 128 response, per
@@ -146,47 +175,48 @@ export class ElegooPrinterClient {
   static startPrint(ip: string, mainboardId: string, remoteFileName: string, timeoutMs = 15000): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`ws://${ip}:${WS_PORT}/websocket`)
+      const requestId = randomUUID().replace(/-/g, '').slice(0, 16)
+      let settled = false
+
+      const finish = (error?: Error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        ws.close()
+        if (error) reject(error)
+        else resolve()
+      }
 
       const timeout = setTimeout(() => {
         console.error('[Elegoo] WebSocket: hard timeout, no response to start-print command')
         ws.terminate()
-        reject(new Error('Timed out waiting for the printer to acknowledge the print command'))
+        finish(new Error('Timed out waiting for the printer to acknowledge the print command'))
       }, timeoutMs)
 
       ws.on('open', () => {
         console.log('[Elegoo] WebSocket: connected, sending start-print command')
-        const requestId = randomUUID().replace(/-/g, '').slice(0, 16)
-        const packet = {
-          Id: mainboardId,
-          Data: {
-            Cmd: 128,
-            Data: {
-              Filename: remoteFileName,
-              StartLayer: 0,
-            },
-            RequestID: requestId,
-            MainboardID: mainboardId,
-            TimeStamp: Date.now(),
-            From: 0,
-          },
-          Topic: `sdcp/request/${mainboardId}`,
-        }
+        const packet = this.buildStartPrintPacket(mainboardId, remoteFileName, requestId)
         ws.send(JSON.stringify(packet))
       })
 
       ws.on('message', (data) => {
         try {
-          const msg = JSON.parse(data.toString())
+          // Some firmware prefixes frames with their decimal byte length.
+          const frame = data.toString().replace(/^\d+(?=\{)/, '')
+          const msg = JSON.parse(frame)
           console.log('[Elegoo] WebSocket: message received:', JSON.stringify(msg).slice(0, 300))
-          if (typeof msg?.Topic === 'string' && msg.Topic.includes('/response/')) {
+          if (
+            typeof msg?.Topic === 'string' &&
+            msg.Topic.includes('/response/') &&
+            msg?.Data?.RequestID === requestId &&
+            msg?.Data?.Cmd === 128
+          ) {
             const ack = msg?.Data?.Data?.Ack
-            clearTimeout(timeout)
-            ws.close()
             if (ack === 0) {
-              resolve()
+              finish()
             } else {
               const reason = this.PRINT_ACK_MESSAGES[ack] || `unknown Ack code ${ack}`
-              reject(new Error(`Printer rejected the print command: ${reason} (Ack=${ack})`))
+              finish(new Error(`Printer rejected the print command: ${reason} (Ack=${ack})`))
             }
           }
         } catch {
@@ -196,8 +226,7 @@ export class ElegooPrinterClient {
 
       ws.on('error', (err) => {
         console.error('[Elegoo] WebSocket: error:', err.message)
-        clearTimeout(timeout)
-        reject(err)
+        finish(err)
       })
 
       ws.on('close', () => console.log('[Elegoo] WebSocket: closed'))

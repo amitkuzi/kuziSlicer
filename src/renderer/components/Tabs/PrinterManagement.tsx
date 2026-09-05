@@ -20,7 +20,7 @@ const INITIAL_FORM: FormData = {
   name: '',
   model: '',
   ipAddress: '',
-  port: '5000',
+  port: '80',
 }
 
 export const PrinterManagement: React.FC = () => {
@@ -76,7 +76,7 @@ export const PrinterManagement: React.FC = () => {
       name: printer.name,
       model: printer.model,
       ipAddress: printer.ipAddress || '',
-      port: printer.port || '5000',
+      port: printer.port || '80',
     })
     setEditingId(printer.id)
     setModalMode('edit')
@@ -362,7 +362,7 @@ export const PrinterManagement: React.FC = () => {
                   name="port"
                   value={formData.port}
                   onChange={handleFormChange}
-                  placeholder="5000"
+                  placeholder="80"
                   className="w-full px-3 py-2 border border-fg2/20 rounded-lg bg-ground text-fg focus:outline-none focus:border-ember"
                 />
               </div>

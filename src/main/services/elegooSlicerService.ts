@@ -7,10 +7,33 @@ export interface ElegooSliceOptions {
   outputDirectory: string
   nozzleSize: number
   filamentMaterial: string
+  filamentName?: string
+  filamentId?: string
 }
 
 export class ElegooSlicerService {
   private static readonly INSTALL_DIRECTORY = 'C:\\Program Files\\ElegooSlicer'
+  private static readonly FILAMENT_PRESETS: Readonly<Record<string, string>> = {
+    PLA: 'Elegoo PLA @ECC.json',
+    PETG: 'Elegoo PETG @ECC.json',
+    ABS: 'Elegoo ABS @ECC.json',
+    ASA: 'Elegoo ASA @ECC.json',
+    TPU: 'Elegoo TPU 95A @ECC.json',
+    PC: 'Elegoo PC @ECC.json',
+  }
+  private static readonly GENERIC_FILAMENT_PRESETS: Readonly<Record<string, string>> = {
+    PLA: 'Generic PLA @Elegoo Centauri.json',
+    PETG: 'Generic PETG @Elegoo.json',
+    ABS: 'Generic ABS @Elegoo Centauri.json',
+    ASA: 'Generic ASA @Elegoo.json',
+    PC: 'Generic PC @Elegoo.json',
+    PA: 'Generic PA @Elegoo.json',
+    NYLON: 'Generic PA @Elegoo.json',
+    // ElegooSlicer does not ship a Generic TPU preset. Its ECC TPU 95A
+    // preset is the closest official type-level profile and is used only
+    // for generic TPU 95A selections.
+    TPU: 'Elegoo TPU 95A @ECC.json',
+  }
 
   static supports(printerId: string): boolean {
     return printerId === 'elegoo-centauri-carbon'
@@ -28,14 +51,22 @@ export class ElegooSlicerService {
     if (options.nozzleSize !== 0.4) {
       throw new Error('Only the verified Centauri Carbon 0.4 mm profile is currently enabled.')
     }
-    if (options.filamentMaterial.toUpperCase() !== 'PLA') {
-      throw new Error('Only the verified Elegoo PLA profile is currently enabled for direct Centauri Carbon slicing.')
+    const material = options.filamentMaterial.trim().toUpperCase()
+    const isGeneric = /generic/i.test(`${options.filamentName ?? ''} ${options.filamentId ?? ''}`)
+    const filamentPreset = isGeneric
+      ? this.GENERIC_FILAMENT_PRESETS[material]
+      : this.FILAMENT_PRESETS[material]
+    if (!filamentPreset) {
+      const profileKind = isGeneric ? 'generic' : 'Elegoo'
+      const supported = Object.keys(isGeneric ? this.GENERIC_FILAMENT_PRESETS : this.FILAMENT_PRESETS)
+      throw new Error(`No ${profileKind} Centauri Carbon profile is configured for ${options.filamentMaterial || 'the selected filament'}. Supported materials: ${supported.join(', ')}.`)
     }
 
     const profileRoot = path.join(this.INSTALL_DIRECTORY, 'resources', 'profiles', 'Elegoo')
     const machine = path.join(profileRoot, 'machine', 'ECC', 'Elegoo Centauri Carbon 0.4 nozzle.json')
     const process = path.join(profileRoot, 'process', 'ECC', '0.20mm Standard @Elegoo CC 0.4 nozzle.json')
-    const filament = path.join(profileRoot, 'filament', 'ECC', 'Elegoo PLA @ECC.json')
+    const filamentDirectory = filamentPreset.startsWith('Generic ') ? 'Generic' : 'ECC'
+    const filament = path.join(profileRoot, 'filament', filamentDirectory, filamentPreset)
     for (const profile of [machine, process, filament]) {
       if (!fs.existsSync(profile)) throw new Error(`Required official ElegooSlicer profile not found: ${profile}`)
     }

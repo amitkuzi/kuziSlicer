@@ -4,8 +4,9 @@
  */
 
 import * as path from 'path'
+import * as fs from 'fs'
 import { app } from 'electron'
-import PluginHostClient from './clients/pluginHostClient'
+import PluginHostClient from '../clients/pluginHostClient'
 import StlEngine from './engines/stlEngine'
 import GcodeEngine from './engines/gcodeEngine'
 import ProfilesManager, { ProfilesData } from './profilesManager'
@@ -58,8 +59,8 @@ export class GcodeGenerator {
   /**
    * Initialize generator (call once on app startup).
    */
-  static async initialize(hostClient: PluginHostClient): Promise<void> {
-    this.hostClient = hostClient
+  static async initialize(hostClient?: PluginHostClient): Promise<void> {
+    this.hostClient = hostClient ?? null
     this.profiles = ProfilesManager.loadProfiles()
   }
 
@@ -76,8 +77,10 @@ export class GcodeGenerator {
         outputDirectory,
         nozzleSize: options.printerProfile.nozzleSize,
         filamentMaterial: options.filamentProfile.material,
+        filamentName: options.filamentProfile.name,
+        filamentId: options.filamentProfile.id,
       })
-      return require('fs').readFileSync(outputPath, 'utf-8')
+      return fs.readFileSync(outputPath, 'utf-8')
     }
 
     // Parse STL
