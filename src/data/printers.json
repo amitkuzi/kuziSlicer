@@ -298,6 +298,45 @@
       "maxSpeed": 600,
       "defaultSpeed": 200,
       "acceleration": 20000
+    },
+    {
+      "id": "elegoo-centauri-carbon-02",
+      "name": "Elegoo Centauri Carbon (0.2mm nozzle)",
+      "nozzleSize": 0.2,
+      "bedSizeX": 256,
+      "bedSizeY": 256,
+      "bedSizeZ": 256,
+      "maxTemp": 300,
+      "maxBedTemp": 100,
+      "maxSpeed": 600,
+      "defaultSpeed": 200,
+      "acceleration": 20000
+    },
+    {
+      "id": "elegoo-centauri-carbon-06",
+      "name": "Elegoo Centauri Carbon (0.6mm nozzle)",
+      "nozzleSize": 0.6,
+      "bedSizeX": 256,
+      "bedSizeY": 256,
+      "bedSizeZ": 256,
+      "maxTemp": 300,
+      "maxBedTemp": 100,
+      "maxSpeed": 600,
+      "defaultSpeed": 200,
+      "acceleration": 20000
+    },
+    {
+      "id": "elegoo-centauri-carbon-08",
+      "name": "Elegoo Centauri Carbon (0.8mm nozzle)",
+      "nozzleSize": 0.8,
+      "bedSizeX": 256,
+      "bedSizeY": 256,
+      "bedSizeZ": 256,
+      "maxTemp": 300,
+      "maxBedTemp": 100,
+      "maxSpeed": 600,
+      "defaultSpeed": 200,
+      "acceleration": 20000
     }
   ]
 }
