@@ -1,9 +1,9 @@
 [submodule "brandkit"]
 	path = brandkit
 	url = https://github.com/amitkuzi/amitkuzi-brandkit.git
-[submodule "kuziSlicer.extensions"]
+[submodule "src/plugins/extensions"]
 	path = src/plugins/extensions
 	url = https://github.com/amitkuzi/kuziSlicer.extensions.git
-[submodule "kuziSlicer.PluginHost"]
+[submodule "src/plugins/PluginHost"]
 	path = src/plugins/PluginHost
 	url = https://github.com/amitkuzi/kuziSlicer.PluginHost.git
