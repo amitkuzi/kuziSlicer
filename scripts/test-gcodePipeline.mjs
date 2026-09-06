@@ -27,12 +27,22 @@ function loadModule(entry, exportNames) {
 const StlEngine = loadModule('src/main/services/engines/stlEngine.ts', ['StlEngine'])
 const GcodeEngine = loadModule('src/main/services/engines/gcodeEngine.ts', ['GcodeEngine'])
 
-// Write a minimal valid binary STL: a single triangle spanning a 10x10x5mm box.
+// Write a valid binary STL of a closed 10x10x5mm box (12 triangles). It has to be a
+// real solid: the slicer traces closed cross-sections, so an open surface has nothing
+// to trace (see the non-manifold assertion below).
 function writeBinaryStl(filePath) {
+  const p = [
+    [0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0],
+    [0, 0, 5], [10, 0, 5], [10, 10, 5], [0, 10, 5],
+  ]
+  const face = (a, b, c, d) => [{ v: [p[a], p[b], p[c]] }, { v: [p[a], p[c], p[d]] }]
   const triangles = [
-    // normal(3f) + 3x vertex(3f) + attr(2b) = 50 bytes/triangle
-    { v: [[0, 0, 0], [10, 0, 0], [0, 10, 5]] },
-    { v: [[10, 0, 0], [10, 10, 5], [0, 10, 5]] },
+    ...face(0, 3, 2, 1), // bottom
+    ...face(4, 5, 6, 7), // top
+    ...face(0, 1, 5, 4),
+    ...face(1, 2, 6, 5),
+    ...face(2, 3, 7, 6),
+    ...face(3, 0, 4, 7),
   ]
   const buf = Buffer.alloc(84 + triangles.length * 50)
   buf.write('kuziSlicer test STL'.padEnd(80, ' '), 0, 'ascii')
@@ -56,7 +66,7 @@ writeBinaryStl(tmpStl)
 
 try {
   const geometry = StlEngine.parseStl(tmpStl)
-  assert.equal(geometry.vertices.length, 6, 'should parse 2 triangles = 6 vertices')
+  assert.equal(geometry.vertices.length, 36, 'should parse 12 triangles = 36 vertices')
   assert.deepEqual(geometry.bounds.max, [10, 10, 5], 'bounds should match the synthetic box')
 
   const printer = {
@@ -68,15 +78,26 @@ try {
     id: 'pla-generic', name: 'PLA (Generic)', material: 'PLA',
     extruderTemp: 200, bedTemp: 60, printSpeed: 50, retractDistance: 5, retractSpeed: 40,
   }
-  const settings = { layerHeight: 0.2, infillDensity: 20, shellThickness: 1.2, supportEnabled: false, fanSpeed: 100 }
+  const settings = { layerHeight: 0.2, infillDensity: 20, infillPattern: 'grid', shellThickness: 1.2, supportEnabled: false, fanSpeed: 100 }
 
   const gcode = GcodeEngine.generate({ geometry, printer, filament, settings })
 
   assert.match(gcode, /M104 S200/, 'should set extruder temp from filament profile')
   assert.match(gcode, /M140 S60/, 'should set bed temp from filament profile')
-  assert.match(gcode, /Layer 0 \/ 25/, 'a 5mm model at 0.2mm layers should slice into 25 layers')
+  assert.match(gcode, /; Layer 25\/25/, 'a 5mm model at 0.2mm layers should slice into 25 layers')
   assert.match(gcode, /Bambu Lab A1 Mini/, 'header should name the selected printer')
   assert.match(gcode, /PLA \(Generic\)/, 'header should name the selected filament')
+  assert.match(gcode, /Infill: 20% Grid/, 'header should record the chosen infill')
+
+  // The toolpath must follow the real cross-section, not the bounding box: a 10x10 box
+  // inset by half a nozzle should reach ~0.2mm inside each wall, nowhere beyond.
+  const xs = gcode.split('\n').filter((l) => /^G[01] X/.test(l)).map((l) => parseFloat(l.match(/X(-?[\d.]+)/)[1]))
+  const spanX = Math.max(...xs) - Math.min(...xs)
+  assert.ok(Math.abs(spanX - 9.6) < 0.3, `printed footprint should be ~9.6mm wide, got ${spanX.toFixed(2)}`)
+
+  // Feature markers let the preview (and external viewers) colour the toolpath.
+  assert.match(gcode, /;TYPE:WALL-OUTER/, 'perimeters should be tagged')
+  assert.match(gcode, /;TYPE:(FILL|SKIN)/, 'infill should be tagged')
 
   // Regression: perimeter moves must actually extrude (G1 + E), not just travel (G0).
   // A prior bug drew every perimeter with G0 and no E, so the printer moved but never extruded.
@@ -85,6 +106,22 @@ try {
   assert.ok(g1Lines.every((l) => /E-?\d/.test(l)), 'every perimeter G1 move must carry an E value')
   const eValues = g1Lines.map((l) => parseFloat(l.match(/E(-?[\d.]+)/)[1]))
   assert.ok(eValues.some((e) => e > 0), 'extrusion (E) must actually increase above zero somewhere')
+
+  // Infill pattern must actually change the toolpath, not just the header.
+  const gridLines = gcode.split('\n').length
+  const concentricLines = GcodeEngine.generate({
+    geometry, printer, filament, settings: { ...settings, infillPattern: 'concentric' },
+  }).split('\n').length
+  assert.notEqual(gridLines, concentricLines, 'switching infill pattern must change the toolpath')
+
+  // A surface-only mesh has no closed cross-section: fail loudly rather than emitting
+  // a G-code file that runs the printer through an empty print.
+  const openMesh = { vertices: [[0, 0, 0], [10, 0, 0], [0, 10, 5]], bounds: { min: [0, 0, 0], max: [10, 10, 5] } }
+  assert.throws(
+    () => GcodeEngine.generate({ geometry: openMesh, printer, filament, settings }),
+    /not a closed solid/,
+    'non-manifold input should be rejected with a clear message'
+  )
 
   const time = GcodeEngine.estimatePrintTime(geometry, filament, settings)
   const weight = GcodeEngine.estimateFilamentWeight(geometry, filament, settings)

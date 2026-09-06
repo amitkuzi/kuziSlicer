@@ -3,6 +3,7 @@ import { PrintSettings, PrintSettingsState } from './PrintSettings'
 import { ModelViewer } from './Tabs/ModelViewer'
 import { GcodeViewer } from './Tabs/GcodeViewer'
 import { PrinterManagement } from './Tabs/PrinterManagement'
+import { ModelTransform, IDENTITY_TRANSFORM } from '../utils/viewportTools'
 
 type Tab = '3d-viewer' | 'gcode-viewer' | 'printer-mgmt'
 export type ExperienceMode = 'simple' | 'advanced'
@@ -15,6 +16,8 @@ export const MainWindow: React.FC = () => {
   const [printSettings, setPrintSettings] = useState<PrintSettingsState | null>(null)
   const [gcodeData, setGcodeData] = useState<string>('')
   const [modelPath, setModelPath] = useState<string | null>(null)
+  const [openModelSignal, setOpenModelSignal] = useState(0)
+  const [modelTransform, setModelTransform] = useState<ModelTransform>(IDENTITY_TRANSFORM)
   const [experienceMode, setExperienceMode] = useState<ExperienceMode>(loadExperienceMode)
 
   useEffect(() => {
@@ -34,7 +37,11 @@ export const MainWindow: React.FC = () => {
         <PrintSettings
           mode={experienceMode}
           modelPath={modelPath}
-          onRequestModel={() => setActiveTab('3d-viewer')}
+          modelTransform={modelTransform}
+          onRequestModel={() => {
+            setActiveTab('3d-viewer')
+            setOpenModelSignal((n) => n + 1)
+          }}
           onSettingsChange={setPrintSettings}
           onGenerateGcode={(gcode) => {
             setGcodeData(gcode)
@@ -79,12 +86,21 @@ export const MainWindow: React.FC = () => {
         </div>
 
         {/* Tab Content */}
+        {/* Tabs stay mounted so the 3D scene (and its WebGL context) survives tab switches */}
         <div className="flex-1 overflow-hidden">
-          {activeTab === '3d-viewer' && (
-            <ModelViewer onModelLoaded={(path) => setModelPath(path)} />
-          )}
-          {activeTab === 'gcode-viewer' && <GcodeViewer gcode={gcodeData} />}
-          {activeTab === 'printer-mgmt' && <PrinterManagement />}
+          <div className={`w-full h-full ${activeTab === '3d-viewer' ? '' : 'hidden'}`}>
+            <ModelViewer
+              onModelLoaded={(path) => setModelPath(path)}
+              openDialogSignal={openModelSignal}
+              onTransformChange={setModelTransform}
+            />
+          </div>
+          <div className={`w-full h-full ${activeTab === 'gcode-viewer' ? '' : 'hidden'}`}>
+            <GcodeViewer gcode={gcodeData} />
+          </div>
+          <div className={`w-full h-full ${activeTab === 'printer-mgmt' ? '' : 'hidden'}`}>
+            <PrinterManagement />
+          </div>
         </div>
       </main>
     </div>

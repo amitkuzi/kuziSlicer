@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import * as fs from 'fs'
 import * as net from 'net'
-import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings } from './services/gcodeGenerator'
+import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings, ModelTransform } from './services/gcodeGenerator'
 import PluginHostClient from './clients/pluginHostClient'
 import BambuPrinterClient from './clients/bambuPrinterClient'
 import elegooCentauriCarbon from '../plugins/extensions/plugins/elegoo-centauri-carbon/src/index'
@@ -10,6 +10,7 @@ import PluginManager from './services/pluginManager'
 import ProfilesManager from './services/profilesManager'
 import ProfilesAccessor from './services/profilesAccessor'
 import { ConfiguredPrinter } from '../types/ipc'
+import { PATTERNS as INFILL_PATTERNS } from './services/engines/infill'
 import GcodeValidationEngine from './services/engines/gcodeValidationEngine'
 import { printerExtensions } from '../printer-extensions/registry'
 import { bounded, runPrint } from '../printer-extensions/core/runner'
@@ -93,7 +94,7 @@ function saveSettings(settings: Record<string, unknown>): void {
 // IPC Handlers — G-code
 // ============================================================
 
-ipcMain.handle('gcode:generate', async (_event, modelPath: string, printerName: string, filamentName: string, settings: PrintSettings) => {
+ipcMain.handle('gcode:generate', async (_event, modelPath: string, printerName: string, filamentName: string, settings: PrintSettings, transform?: ModelTransform) => {
   const printers = GcodeGenerator.getPrinterProfiles()
   const filaments = GcodeGenerator.getFilamentProfiles()
   const printer = printers.find((p) => p.name === printerName)
@@ -107,6 +108,7 @@ ipcMain.handle('gcode:generate', async (_event, modelPath: string, printerName: 
     printerProfile: printer,
     filamentProfile: filament,
     settings,
+    transform,
   })
 
   const tempDir = path.join(app.getPath('temp'), 'kuziSlicer')
@@ -116,6 +118,10 @@ ipcMain.handle('gcode:generate', async (_event, modelPath: string, printerName: 
   fs.writeFileSync(gcodeFilePath, gcode)
   return gcodeFilePath
 })
+
+ipcMain.handle('gcode:infill-patterns', () =>
+  INFILL_PATTERNS.map(({ id, name, description }) => ({ id, name, description }))
+)
 
 ipcMain.handle('gcode:printers', async () => {
   return GcodeGenerator.getPrinterProfiles()
@@ -188,8 +194,9 @@ ipcMain.handle('printer:elegoo-print', async (_event, data: { ip: string; gcode:
   }
   const uniqueFileName = `kuziSlicer_${Date.now()}_${validation.layerCount}L.gcode`
   const conn = { ip: data.ip }
-    fileName: data.fileName || `kuziSlicer_print_${Date.now()}.gcode`,
   try {
+    const { remoteFileName } = await elegooCentauriCarbon.uploadFile(conn, data.gcode, uniqueFileName)
+    return elegooCentauriCarbon.startPrint(conn, remoteFileName)
   } catch (err) {
     return { success: false, message: err instanceof Error ? err.message : String(err) }
   }

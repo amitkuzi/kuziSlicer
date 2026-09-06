@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('electron', {
       'gcode:generate',
       'gcode:printers',
       'gcode:filaments',
+      'gcode:infill-patterns',
       'gcode:estimate-time',
       'gcode:estimate-weight',
       'settings:get',

@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { PrinterProfile, FilamentProfile } from '../../types/ipc'
+import { PrinterProfile, FilamentProfile, ConfiguredPrinter, ModelTransform } from '../../types/ipc'
 import type { ExperienceMode } from './MainWindow'
+
+interface InfillPatternInfo {
+  id: string
+  name: string
+  description: string
+}
 
 export interface PrintSettingsState {
   modelName: string
@@ -9,6 +15,7 @@ export interface PrintSettingsState {
   nozzleSize: number
   layerHeight: number
   infillPercentage: number
+  infillPattern: string
   supportEnabled: boolean
   extruderTemp: number
   bedTemp: number
@@ -23,6 +30,7 @@ const DEFAULT_SETTINGS: PrintSettingsState = {
   nozzleSize: 0.4,
   layerHeight: 0.2,
   infillPercentage: 20,
+  infillPattern: 'grid',
   supportEnabled: false,
   extruderTemp: 200,
   bedTemp: 60,
@@ -31,6 +39,13 @@ const DEFAULT_SETTINGS: PrintSettingsState = {
 }
 
 const NOZZLE_SIZES = [0.4, 0.6]
+
+// Layer height is physically bounded by the nozzle: below ~25% of nozzle diameter the
+// extrudate can't bond, above ~80% it won't stick to the layer beneath.
+const layerHeightRange = (nozzleSize: number) => ({
+  min: Math.round(nozzleSize * 0.25 * 100) / 100,
+  max: Math.round(nozzleSize * 0.8 * 100) / 100,
+})
 
 const SIMPLE_STEPS = [
   { key: 'model', title: 'Model', hint: 'Pick the 3D file you want to print.' },
@@ -75,6 +90,8 @@ const FormField: React.FC<FormFieldProps> = ({ label, children }) => (
 export interface PrintSettingsProps {
   mode: ExperienceMode
   modelPath?: string | null
+  /** Viewport move/rotate/scale, so the slice matches what the 3D viewer shows. */
+  modelTransform?: ModelTransform
   onRequestModel?: () => void
   onSettingsChange?: (settings: PrintSettingsState) => void
   onGenerateGcode?: (gcode: string) => void
@@ -83,6 +100,7 @@ export interface PrintSettingsProps {
 export const PrintSettings: React.FC<PrintSettingsProps> = ({
   mode,
   modelPath,
+  modelTransform,
   onRequestModel,
   onSettingsChange,
   onGenerateGcode,
@@ -90,6 +108,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
   const [settings, setSettings] = useState<PrintSettingsState>(DEFAULT_SETTINGS)
   const [printers, setPrinters] = useState<PrinterProfile[]>([])
   const [filaments, setFilaments] = useState<FilamentProfile[]>([])
+  const [infillPatterns, setInfillPatterns] = useState<InfillPatternInfo[]>([])
   const [importUrl, setImportUrl] = useState('')
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState<string | null>(null)
@@ -121,14 +140,17 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
     }
   }, [])
 
-  // Fetch available printer + filament profiles (bundled + user-imported)
+  // Fetch printer + filament profiles, narrowed to the printers the user actually
+  // configured (Printer Management) -- the full bundled catalogue isn't selectable here.
   const refreshProfiles = async () => {
     try {
-      const [printerList, filamentList] = await Promise.all([
+      const [printerList, filamentList, configured] = await Promise.all([
         window.electron.invoke('gcode:printers') as Promise<PrinterProfile[]>,
         window.electron.invoke('gcode:filaments') as Promise<FilamentProfile[]>,
+        window.electron.invoke('printer:configured:list') as Promise<ConfiguredPrinter[]>,
       ])
-      setPrinters(printerList || [])
+      const configuredModels = new Set((configured || []).map((c) => c.model))
+      setPrinters((printerList || []).filter((p) => configuredModels.has(p.id)))
       setFilaments(filamentList || [])
     } catch (e) {
       console.error('Failed to fetch profiles:', e)
@@ -137,7 +159,21 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
 
   useEffect(() => {
     refreshProfiles()
+    // Pattern list comes from the infill registry, so registering a new pattern
+    // surfaces it here without touching this component.
+    window.electron
+      .invoke('gcode:infill-patterns')
+      .then((list) => setInfillPatterns((list as InfillPatternInfo[]) || []))
+      .catch((e) => console.error('Failed to fetch infill patterns:', e))
   }, [])
+
+  const layerRange = layerHeightRange(settings.nozzleSize)
+
+  // Keep layer height inside what the current nozzle can actually extrude
+  useEffect(() => {
+    const clamped = Math.min(layerRange.max, Math.max(layerRange.min, settings.layerHeight))
+    if (clamped !== settings.layerHeight) handleSettingChange('layerHeight', clamped)
+  }, [settings.nozzleSize])
 
   const handlePrinterChange = (printerId: string) => {
     handleSettingChange('printer', printerId)
@@ -227,8 +263,8 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
       alert('Load a model via a full path first (Browse… or paste a path in the 3D Viewer) -- G-code generation needs a file on disk, not just a preview.')
       return
     }
-    if (!modelPath.toLowerCase().endsWith('.stl')) {
-      alert('G-code generation currently only supports .stl models.')
+    if (!/\.(stl|3mf)$/i.test(modelPath)) {
+      alert('G-code generation supports .stl and .3mf models.')
       return
     }
     const printer = printers.find((p) => p.id === settings.printer)
@@ -254,10 +290,12 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
         {
           layerHeight: settings.layerHeight,
           infillDensity: settings.infillPercentage,
+          infillPattern: settings.infillPattern,
           shellThickness: printer.nozzleSize * 3,
           supportEnabled: settings.supportEnabled,
           fanSpeed: 100,
-        }
+        },
+        modelTransform
       )) as string
       const read = (await window.electron.invoke('file:read', gcodeFilePath)) as {
         success: boolean
@@ -286,6 +324,29 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
       [section]: !prev[section],
     }))
   }
+
+  // Same control in both modes -- the pattern list is registry-driven, so it is built once here.
+  const infillPatternField = (
+    <FormField label="Infill Pattern">
+      <select
+        value={settings.infillPattern}
+        onChange={(e) => handleSettingChange('infillPattern', e.target.value)}
+        disabled={settings.infillPercentage === 0}
+        className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember cursor-pointer disabled:opacity-50"
+      >
+        {infillPatterns.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-fg2">
+        {settings.infillPercentage === 0
+          ? 'Set infill above 0% to choose a pattern.'
+          : infillPatterns.find((p) => p.id === settings.infillPattern)?.description || ''}
+      </p>
+    </FormField>
+  )
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -363,6 +424,9 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
                       </option>
                     ))}
                   </select>
+                  {printers.length === 0 && (
+                    <p className="text-xs text-fg2">Add a printer in the Printer Management tab first.</p>
+                  )}
                 </FormField>
                 <FormField label={`Filament (${filaments.length} available)`}>
                   <select
@@ -386,18 +450,19 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
                 <FormField label={`Layer Height: ${settings.layerHeight}mm`}>
                   <input
                     type="range"
-                    min="0.1"
-                    max="0.4"
+                    min={layerRange.min}
+                    max={layerRange.max}
                     step="0.05"
                     value={settings.layerHeight}
                     onChange={(e) => handleSettingChange('layerHeight', parseFloat(e.target.value))}
                     className="w-full h-2 bg-fg2/20 rounded appearance-none cursor-pointer accent-ember"
                   />
                   <div className="flex gap-2 text-xs text-fg2">
-                    <span>0.1mm (fine)</span>
+                    <span>{layerRange.min}mm (fine)</span>
                     <span className="flex-1"></span>
-                    <span>0.4mm (fast)</span>
+                    <span>{layerRange.max}mm (fast)</span>
                   </div>
+                  <p className="text-xs text-fg2">Range set by your {settings.nozzleSize}mm nozzle.</p>
                 </FormField>
                 <FormField label={`Infill: ${settings.infillPercentage}%`}>
                   <input
@@ -415,6 +480,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
                     <span>100%</span>
                   </div>
                 </FormField>
+                {infillPatternField}
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-fg2">Supports</label>
                   <button
@@ -517,6 +583,9 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
                 </option>
               ))}
             </select>
+            {printers.length === 0 && (
+              <p className="text-xs text-fg2">Add a printer in the Printer Management tab first.</p>
+            )}
           </FormField>
           {mode === 'advanced' && <FormField label="Nozzle Size">
             <select
@@ -575,17 +644,17 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
           <FormField label={`Layer Height: ${settings.layerHeight}mm`}>
             <input
               type="range"
-              min="0.1"
-              max="0.4"
+              min={layerRange.min}
+              max={layerRange.max}
               step="0.05"
               value={settings.layerHeight}
               onChange={(e) => handleSettingChange('layerHeight', parseFloat(e.target.value))}
               className="w-full h-2 bg-fg2/20 rounded appearance-none cursor-pointer accent-ember"
             />
             <div className="flex gap-2 text-xs text-fg2">
-              <span>0.1mm</span>
+              <span>{layerRange.min}mm</span>
               <span className="flex-1"></span>
-              <span>0.4mm</span>
+              <span>{layerRange.max}mm</span>
             </div>
           </FormField>
           <FormField label={`Infill: ${settings.infillPercentage}%`}>
@@ -604,6 +673,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               <span>100%</span>
             </div>
           </FormField>
+          {infillPatternField}
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-fg2">Supports</label>
             <button

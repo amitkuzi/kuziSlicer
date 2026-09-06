@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react'
-import * as THREE from 'three'
+import React, { useState, useEffect } from 'react'
 import { ConfiguredPrinter } from '../../../types/ipc'
 import { RapidPrinterPanel } from '../RapidPrinterPanel'
+import { GcodePreview } from './GcodePreview'
 
 interface GcodeStats {
   lines: number
@@ -29,9 +29,6 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [stats, setStats] = useState<GcodeStats>({ lines: 0, size: 0, layers: 0, estimatedTime: 0, filamentUsage: 0 })
   const [showPreview, setShowPreview] = useState(true)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-  const sceneRef = useRef<THREE.Scene | null>(null)
 
   // Parse G-code and calculate stats
   useEffect(() => {
@@ -41,11 +38,9 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
       let filament = 0
 
       lines.forEach((line) => {
-        if (line.includes('G0 Z')) layerCount++
-        if (line.includes('E')) {
-          const eMatch = line.match(/E([\d.]+)/)
-          if (eMatch) filament += parseFloat(eMatch[1])
-        }
+        if (/^G[01] Z/.test(line)) layerCount++
+        const eMatch = line.match(/E([\d.]+)/)
+        if (eMatch) filament += parseFloat(eMatch[1])
       })
 
       setStats({
@@ -53,112 +48,11 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
         size: new Blob([code]).size,
         layers: layerCount,
         estimatedTime: Math.round(lines.length / 20), // rough estimate: 20 commands/min
-        filamentUsage: Math.round(filament * 100) / 100,
+        filamentUsage: Math.round((filament / 1000) * 100) / 100, // mm of filament → metres
       })
     }
   }, [code])
 
-  // Initialize 3D preview
-  useEffect(() => {
-    if (!canvasRef.current || !showPreview) return
-
-    const width = canvasRef.current.clientWidth
-    const height = canvasRef.current.clientHeight
-
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x1a1a1a)
-    sceneRef.current = scene
-
-    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
-    camera.position.z = 150
-
-    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
-    renderer.setSize(width, height)
-    renderer.setPixelRatio(window.devicePixelRatio)
-    rendererRef.current = renderer
-
-    // Add grid
-    const gridHelper = new THREE.GridHelper(200, 10)
-    scene.add(gridHelper)
-
-    // Add axes
-    const axesHelper = new THREE.AxesHelper(50)
-    scene.add(axesHelper)
-
-    // Parse G-code and render toolpath
-    const geometry = new THREE.BufferGeometry()
-    const printGeometry = new THREE.BufferGeometry()
-    const positions: number[] = []
-    const printPositions: number[] = []
-
-    let x = 0, y = 0, z = 0
-    let inTravel = true
-
-    code.split('\n').forEach((line) => {
-      if (line.startsWith('G0')) {
-        inTravel = true
-      } else if (line.startsWith('G1')) {
-        inTravel = false
-      }
-
-      const xMatch = line.match(/X([\d.-]+)/)
-      const yMatch = line.match(/Y([\d.-]+)/)
-      const zMatch = line.match(/Z([\d.-]+)/)
-      const eMatch = line.match(/E([\d.-]+)/)
-
-      if (xMatch) x = parseFloat(xMatch[1])
-      if (yMatch) y = parseFloat(yMatch[1])
-      if (zMatch) z = parseFloat(zMatch[1])
-
-      if (eMatch || (xMatch || yMatch || zMatch)) {
-        if (inTravel) {
-          positions.push(x, y, z)
-        } else {
-          printPositions.push(x, y, z)
-        }
-      }
-    })
-
-    // Add travel moves (yellow dashed)
-    if (positions.length > 0) {
-      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3))
-      const material = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 1 })
-      const line = new THREE.Line(geometry, material)
-      scene.add(line)
-    }
-
-    // Add print moves (blue solid)
-    if (printPositions.length > 0) {
-      printGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(printPositions), 3))
-      const material = new THREE.LineBasicMaterial({ color: 0x0088ff, linewidth: 2 })
-      const line = new THREE.Line(printGeometry, material)
-      scene.add(line)
-    }
-
-    // Animation loop
-    const animate = () => {
-      requestAnimationFrame(animate)
-      renderer.render(scene, camera)
-    }
-
-    animate()
-
-    // Handle window resize
-    const handleResize = () => {
-      const newWidth = canvasRef.current?.clientWidth || width
-      const newHeight = canvasRef.current?.clientHeight || height
-      camera.aspect = newWidth / newHeight
-      camera.updateProjectionMatrix()
-      renderer.setSize(newWidth, newHeight)
-    }
-
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      renderer.dispose()
-    }
-  }, [code, showPreview])
 
   // Fetch printer list
   useEffect(() => {
@@ -445,16 +339,13 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
 
         {/* 3D Preview */}
         {showPreview && (
-          <div className="flex-1 bg-raised rounded border border-fg2/10 overflow-hidden">
-            <div className="p-3 border-b border-fg2/10">
+          <div className="flex-1 flex flex-col bg-raised rounded border border-fg2/10 overflow-hidden">
+            <div className="p-3 border-b border-fg2/10 shrink-0">
               <h3 className="font-semibold text-fg">Print Path Preview</h3>
-              <p className="text-xs text-fg2 mt-1">Blue: print moves | Yellow: travel moves</p>
             </div>
-            <canvas
-              ref={canvasRef}
-              className="w-full h-full"
-              style={{ display: 'block' }}
-            />
+            <div className="flex-1 min-h-0">
+              <GcodePreview gcode={code} />
+            </div>
           </div>
         )}
       </div>

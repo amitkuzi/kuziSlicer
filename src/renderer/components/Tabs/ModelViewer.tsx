@@ -3,6 +3,13 @@ import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls'
+import {
+  VIEWPORT_TOOLS,
+  ModelTransform,
+  IDENTITY_TRANSFORM,
+  GizmoMode,
+} from '../../utils/viewportTools'
 
 interface ModelStats {
   vertices: number
@@ -12,16 +19,30 @@ interface ModelStats {
 
 interface ModelViewerProps {
   onModelLoaded?: (path: string | null, fileName: string) => void
+  // Bumped by the sidebar's "Load Model" button to pop the file dialog from anywhere
+  openDialogSignal?: number
+  /** Reports move/rotate/scale so slicing prints what the viewport shows. */
+  onTransformChange?: (transform: ModelTransform) => void
+  bedSize?: { x: number; y: number }
 }
 
-export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
+export const ModelViewer: React.FC<ModelViewerProps> = ({
+  onModelLoaded,
+  openDialogSignal,
+  onTransformChange,
+  bedSize = { x: 220, y: 220 },
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const controlsRef = useRef<OrbitControls | null>(null)
   const modelRef = useRef<THREE.Group | null>(null)
+  const transformRef = useRef<TransformControls | null>(null)
+  const reportTransformRef = useRef<(() => void) | null>(null)
 
+  const [activeTool, setActiveTool] = useState<GizmoMode | null>(null)
+  const [transform, setTransform] = useState<ModelTransform>(IDENTITY_TRANSFORM)
   const [stats, setStats] = useState<ModelStats | null>(null)
   const [wireframe, setWireframe] = useState(false)
   const [fileLoaded, setFileLoaded] = useState(false)
@@ -46,7 +67,10 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
       0.1,
       1000
     )
-    camera.position.z = 50
+    // Z-up: printers work in Z-up and STL/3MF models are authored that way, so the
+    // viewport matches the plate and the G-code preview instead of lying on its side.
+    camera.up.set(0, 0, 1)
+    camera.position.set(bedSize.x * 0.9, -bedSize.y * 0.9, bedSize.x * 0.7)
     cameraRef.current = camera
 
     // Renderer -- some environments (remote desktop / VM / disabled GPU driver) refuse a
@@ -81,11 +105,66 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
     directionalLight.position.set(10, 20, 15)
     scene.add(directionalLight)
 
+    // Build plate, so the model's size and position on the bed are readable at a glance.
+    const grid = new THREE.GridHelper(Math.max(bedSize.x, bedSize.y), 22, 0xb9ada0, 0xdcd3c7)
+    grid.rotation.x = Math.PI / 2 // GridHelper lies in XZ by default; printers use XY
+    grid.position.set(bedSize.x / 2, bedSize.y / 2, 0)
+    scene.add(grid)
+
+    const plate = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(bedSize.x, 0, 0),
+        new THREE.Vector3(bedSize.x, bedSize.y, 0),
+        new THREE.Vector3(0, bedSize.y, 0),
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xe4632d })
+    )
+    scene.add(plate)
+
     // Controls
     const controls = new OrbitControls(camera, canvas)
     controls.enableDamping = true
     controls.dampingFactor = 0.05
+    controls.screenSpacePanning = true
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN,
+    }
+    controls.target.set(bedSize.x / 2, bedSize.y / 2, 0)
+    controls.update()
     controlsRef.current = controls
+
+    // Move/rotate/scale gizmos. In three r169+ TransformControls is no longer an
+    // Object3D -- its visual helper has to be added to the scene separately.
+    const transformControls = new TransformControls(camera, canvas)
+    transformControls.setSpace('world')
+    scene.add(transformControls.getHelper())
+    transformRef.current = transformControls
+
+    // Orbiting while dragging a gizmo would fight the drag.
+    transformControls.addEventListener('dragging-changed', (event) => {
+      controls.enabled = !(event as unknown as { value: boolean }).value
+    })
+
+    const reportTransform = () => {
+      const model = modelRef.current
+      if (!model) return
+      // Keep the model on the plate: dragging it below z=0 would slice into the bed.
+      const box = new THREE.Box3().setFromObject(model)
+      if (box.min.z < 0) model.position.z -= box.min.z
+
+      const next: ModelTransform = {
+        position: [model.position.x, model.position.y, model.position.z],
+        rotation: [model.rotation.x, model.rotation.y, model.rotation.z],
+        scale: [model.scale.x, model.scale.y, model.scale.z],
+      }
+      setTransform(next)
+      onTransformChange?.(next)
+    }
+    reportTransformRef.current = reportTransform
+    transformControls.addEventListener('objectChange', reportTransform)
 
     // Handle window resize
     const handleResize = () => {
@@ -101,17 +180,46 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
     window.addEventListener('resize', handleResize)
 
     // Animation loop
+    let frame = 0
     const animate = () => {
-      requestAnimationFrame(animate)
+      frame = requestAnimationFrame(animate)
       controls.update()
       renderer.render(scene, camera)
     }
     animate()
 
     return () => {
+      cancelAnimationFrame(frame)
       window.removeEventListener('resize', handleResize)
+      transformControls.detach()
+      transformControls.dispose()
+      controls.dispose()
       renderer.dispose()
     }
+  }, [bedSize.x, bedSize.y])
+
+  // Toolbar / keyboard selection drives which gizmo is showing.
+  useEffect(() => {
+    const gizmo = transformRef.current
+    if (!gizmo) return
+    if (activeTool && modelRef.current) {
+      gizmo.setMode(activeTool)
+      gizmo.attach(modelRef.current)
+    } else {
+      gizmo.detach()
+    }
+  }, [activeTool])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+      if (event.key === 'Escape') return setActiveTool(null)
+      const tool = VIEWPORT_TOOLS.find((t) => t.shortcut === event.key.toLowerCase())
+      if (tool) setActiveTool((current) => (current === tool.mode ? null : tool.mode))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   // Parse + display a model already loaded into memory as an ArrayBuffer
@@ -136,27 +244,40 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
 
     // Remove previous model
     if (modelRef.current) {
+      transformRef.current?.detach()
       sceneRef.current.remove(modelRef.current)
     }
 
     // Add new model
     sceneRef.current.add(model)
     modelRef.current = model as THREE.Group
+    setActiveTool(null)
+    setTransform(IDENTITY_TRANSFORM)
+    onTransformChange?.(IDENTITY_TRANSFORM)
 
-    // Compute bounding box and center camera
     const bbox = new THREE.Box3().setFromObject(model)
     const size = bbox.getSize(new THREE.Vector3())
     const center = bbox.getCenter(new THREE.Vector3())
 
-    model.position.sub(center)
+    // Drop the model onto the middle of the plate, sitting on z=0 -- the same place
+    // the slicer puts it, so the viewport and the printed result agree.
+    model.position.set(
+      bedSize.x / 2 - center.x,
+      bedSize.y / 2 - center.y,
+      -bbox.min.z
+    )
 
-    const maxDim = Math.max(size.x, size.y, size.z)
+    const maxDim = Math.max(size.x, size.y, size.z) || 50
     const fov = cameraRef.current.fov * (Math.PI / 180)
-    const distance = maxDim / 2 / Math.tan(fov / 2)
+    const distance = (maxDim / 2 / Math.tan(fov / 2)) * 1.8
+    const focus = new THREE.Vector3(bedSize.x / 2, bedSize.y / 2, size.z / 2)
 
-    cameraRef.current.position.set(0, 0, distance)
-    cameraRef.current.lookAt(0, 0, 0)
-    controlsRef.current?.target.set(0, 0, 0)
+    cameraRef.current.position.set(
+      focus.x + distance * 0.6,
+      focus.y - distance * 0.8,
+      focus.z + distance * 0.6
+    )
+    controlsRef.current?.target.copy(focus)
     controlsRef.current?.update()
 
     // Calculate stats
@@ -209,7 +330,10 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
 
   // Load model from a full filesystem path typed/pasted by the user
   const handleLoadFromPath = async () => {
-    const filePath = pathInput.trim()
+    await loadFromPath(pathInput.trim())
+  }
+
+  const loadFromPath = async (filePath: string) => {
     if (!filePath) return
 
     setPathError(null)
@@ -232,14 +356,36 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
     }
   }
 
-  // Browse for a full path via native dialog, fills the path input
+  // Browse for a full path via native dialog, fills the path input and loads it
   const handleBrowsePath = async () => {
     const result = (await window.electron.invoke('file:open', {
       filters: [{ name: '3D Models', extensions: ['stl', '3mf'] }, { name: 'All', extensions: ['*'] }],
     })) as { canceled: boolean; filePaths: string[] }
     if (!result.canceled && result.filePaths[0]) {
       setPathInput(result.filePaths[0])
+      await loadFromPath(result.filePaths[0])
     }
+  }
+
+  const handledSignal = useRef(openDialogSignal ?? 0)
+  useEffect(() => {
+    if (openDialogSignal === undefined || openDialogSignal === handledSignal.current) return
+    handledSignal.current = openDialogSignal
+    handleBrowsePath()
+  }, [openDialogSignal])
+
+  // Drop the model back to plate centre, unrotated and unscaled.
+  const handleResetTransform = () => {
+    const model = modelRef.current
+    if (!model) return
+    model.rotation.set(0, 0, 0)
+    model.scale.set(1, 1, 1)
+    model.position.set(0, 0, 0)
+    model.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(model)
+    const center = box.getCenter(new THREE.Vector3())
+    model.position.set(bedSize.x / 2 - center.x, bedSize.y / 2 - center.y, -box.min.z)
+    reportTransformRef.current?.()
   }
 
   // Toggle wireframe
@@ -293,16 +439,45 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
         </div>
 
         {fileLoaded && (
-          <button
-            onClick={handleWireframeToggle}
-            className={`px-4 py-2 rounded text-sm font-medium transition ${
-              wireframe
-                ? 'bg-ember text-onEmber'
-                : 'bg-fg2/10 text-fg hover:bg-fg2/20'
-            }`}
-          >
-            Wireframe: {wireframe ? 'ON' : 'OFF'}
-          </button>
+          <>
+            {/* Viewport tools, rendered from the registry */}
+            <div className="flex items-center gap-1 border-l border-fg2/10 pl-4">
+              {VIEWPORT_TOOLS.map((tool) => (
+                <button
+                  key={tool.id}
+                  onClick={() => setActiveTool((current) => (current === tool.mode ? null : tool.mode))}
+                  title={`${tool.name} (${tool.shortcut.toUpperCase()}) — ${tool.hint}`}
+                  aria-pressed={activeTool === tool.mode}
+                  className={`px-3 py-2 rounded text-sm font-medium transition ${
+                    activeTool === tool.mode
+                      ? 'bg-ember text-onEmber'
+                      : 'bg-fg2/10 text-fg hover:bg-fg2/20'
+                  }`}
+                >
+                  <span className="mr-1">{tool.icon}</span>
+                  {tool.name}
+                </button>
+              ))}
+              <button
+                onClick={handleResetTransform}
+                title="Return the model to the middle of the plate, unrotated and unscaled"
+                className="px-3 py-2 rounded text-sm font-medium bg-fg2/10 text-fg hover:bg-fg2/20 transition"
+              >
+                Reset
+              </button>
+            </div>
+
+            <button
+              onClick={handleWireframeToggle}
+              className={`px-4 py-2 rounded text-sm font-medium transition ${
+                wireframe
+                  ? 'bg-ember text-onEmber'
+                  : 'bg-fg2/10 text-fg hover:bg-fg2/20'
+              }`}
+            >
+              Wireframe: {wireframe ? 'ON' : 'OFF'}
+            </button>
+          </>
         )}
 
         {stats && (
@@ -325,6 +500,27 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ onModelLoaded }) => {
       {/* Canvas */}
       <div className="flex-1 relative">
         <canvas ref={canvasRef} className="w-full h-full" />
+
+        {fileLoaded && !webglError && (
+          <>
+            <div className="absolute bottom-3 left-3 rounded bg-raised/90 border border-fg2/10 px-3 py-2 text-xs text-fg2 space-y-0.5">
+              <div>
+                Position X {transform.position[0].toFixed(1)} · Y {transform.position[1].toFixed(1)} · Z{' '}
+                {transform.position[2].toFixed(1)} mm
+              </div>
+              <div>
+                Rotation{' '}
+                {transform.rotation
+                  .map((r) => `${((r * 180) / Math.PI).toFixed(0)}°`)
+                  .join(' · ')}
+                {'  '}Scale {transform.scale.map((s) => `${(s * 100).toFixed(0)}%`).join(' · ')}
+              </div>
+            </div>
+            <div className="absolute bottom-3 right-3 rounded bg-raised/90 border border-fg2/10 px-3 py-2 text-[10px] text-fg2">
+              Drag: rotate view · Right-drag: pan · Wheel: zoom · M/R/S: tools · Esc: deselect
+            </div>
+          </>
+        )}
 
         {webglError && (
           <div className="absolute inset-0 flex items-center justify-center bg-ground">

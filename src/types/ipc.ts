@@ -36,9 +36,18 @@ export interface FilamentProfile {
 export interface PrintSettings {
   layerHeight: number
   infillDensity: number
+  /** Infill pattern id, from the infill library (grid, lines, triangles, gyroid, concentric). */
+  infillPattern?: string
   shellThickness: number
   supportEnabled: boolean
   fanSpeed: number
+}
+
+/** Move/rotate/scale applied in the 3D viewport, carried into slicing. */
+export interface ModelTransform {
+  position: [number, number, number]
+  rotation: [number, number, number]
+  scale: [number, number, number]
 }
 
 export interface ConfiguredPrinter {
@@ -73,7 +82,8 @@ export type InvokeChannels = {
   'file:read': (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>
   'file:read-binary': (filePath: string) => Promise<{ success: boolean; data?: Uint8Array; name?: string; error?: string }>
   'gcode:send': (data: { printer: string; gcode: string }) => Promise<{ success: boolean; message: string }>
-  'gcode:generate': (modelPath: string, printerName: string, filamentName: string, settings: PrintSettings) => Promise<string>
+  'gcode:generate': (modelPath: string, printerName: string, filamentName: string, settings: PrintSettings, transform?: ModelTransform) => Promise<string>
+  'gcode:infill-patterns': () => Promise<{ id: string; name: string; description: string }[]>
   'gcode:printers': () => Promise<PrinterProfile[]>
   'gcode:filaments': () => Promise<FilamentProfile[]>
   'gcode:estimate-time': (modelPath: string, filamentName: string, settings: PrintSettings) => Promise<number>
