@@ -3,6 +3,8 @@
 Status: Draft — **supersedes** [PRD-3d-slicer-unified.md](PRD-3d-slicer-unified.md)
 Author: kuziSlicer project (Claude Code session, extending prior Researcher-agent PRD)
 Date: 2026-09-06
+Updated: 2026-09-06 — added extension trust model (§9), UI modes (§10), and
+the `content.repository` contribution point (§3), per product-owner decisions.
 Supersedes: PRD-3d-slicer-unified.md (2026-09-02) — that document's slicing-engine
 feature synthesis (§2–§13 there) is still valid *content* and is preserved below
 under §4 as the concrete example filling the "Slicing Engine" extension category.
@@ -72,7 +74,8 @@ extension ships both a printer profile *and* its connectivity implementation).
 | `gcode.postProcessor` | Text-transform hook run on the sliced G-code before export/send | Custom start/end sequence injection, per-layer color-change scripts | in-process-node |
 | `ui.panel` | A new sidebar/dashboard panel or widget | Filament cost calculator, print-farm status dashboard | in-process-renderer |
 | `automation.listener` | Subscribes to app lifecycle events, no UI | Print-complete → Discord/Slack webhook | in-process-node |
-| `wizard.step` *(P2)* | A step in a guided flow (calibration, first-run setup) | Temp tower, flow-rate, pressure-advance calibration wizards | composite (engine + renderer) |
+| `content.repository` | Browse/search/download community models from within the app | MakerWorld, Printables, NexPrint | in-process-node |
+| `wizard.step` | A step in a guided flow (calibration, first-run setup, Simple-mode onboarding — see §10) | Temp tower/flow-rate/PA calibration; "New Print" guided flow | composite (engine + renderer) |
 | `ui.theme` *(P2)* | Color palette / CSS token overrides | Dark-mode variant, brand reskin | data-only |
 
 This table is deliberately open-ended: a new contribution point can be added to
@@ -128,11 +131,11 @@ for distribution), not a bug to resolve.
 
 ## 6. Non-Goals
 
-- **Not** building a general-purpose sandboxed plugin marketplace/store at P0 —
-  extensions are installed by placing them in a known directory (bundled or
-  user `plugins/` folder), same as today. A discoverable marketplace is a P2+
-  concern (ties into PRD v1 §8's "central repository" open question, still
-  open).
+- **Not** building a full browsable-marketplace UI (search, ratings, one-click
+  install from a catalog page) at P0 — see §9 for what P0 *does* include (a
+  signed-vs-unsigned trust tier), which resolves PRD v1 §8's "central
+  repository" open question at the mechanism level without committing to a
+  marketplace storefront yet.
 - **Not** rewriting the two existing runtimes from scratch — `kuziSlicer.
   PluginHost` and `kuziSlicer.extensions` both stay; the work is unifying them
   behind one manager and adding the missing renderer runtime, not replacing
@@ -167,37 +170,119 @@ for distribution), not a bug to resolve.
 - Migration of existing `plugin-manifest.ts`/`plugin-engine.ts`/
   `printer-extension-contract.ts` into the unified manifest schema (see HLD).
 
-**P1 — Breadth**
-- `gcode.postProcessor`, `ui.panel`, `automation.listener` contribution points.
+**P1 — Breadth + the two UI modes**
+- `gcode.postProcessor`, `ui.panel`, `automation.listener`, `content.
+  repository`, `wizard.step` contribution points.
+- **Advanced mode** (§10): filament profile management, model editing via
+  viewport tools, slicing, post-slicing processing (e.g. a "true color print"
+  `gcode.postProcessor`), print manager — this is the existing slicer UX
+  direction, now composed from contribution points instead of hard-coded.
+- **Simple mode** (§10): guided "New Print" wizard built from `wizard.step`
+  extensions, minimal decisions surfaced, first `content.repository`
+  extension (MakerWorld/Printables/NexPrint) for browsing community models
+  without leaving the app.
 - Remaining viewport tools (Place-on-face, Mirror, paint-on-supports/seam/
   color, Text/Emboss, Simplify, Variable layer height, Arrange, Auto-orient,
   modifier meshes).
-- Calibration wizard suite as `wizard.step` extensions.
+- Calibration wizard suite as additional `wizard.step` extensions.
 - Klipper/Moonraker `printer.connection` extension (moved here from P0 per §4).
+- **Signed-extension trust tier** (§9) — signing/verification mechanism,
+  liability-disclaimer warning UI for unsigned extensions.
 
 **P2 — Platform maturity**
-- `wizard.step`, `ui.theme` contribution points.
-- Extension marketplace/discovery (central repository).
+- `ui.theme` contribution point.
+- Full marketplace UI (browse/search/install from a catalog) on top of the
+  P1 signing mechanism.
 - STEP import, CSG mesh booleans, interlocking joints (from PRD v1 §2).
 - SLA/resin evaluation (separate go/no-go, unchanged from PRD v1).
 
 ## 8. Open Questions
 
-1. **Extension permission model at P0**: today's `permissions?: Array<'file-
-   read'|'file-write'|'network'|'cpu'>` (from `plugin-manifest.ts`) is
-   declarative but not enforced for `in-process-node`/`in-process-renderer`
-   runtimes (only `subprocess-host` gets real OS-level isolation). Ship as
-   documentation-only for P0, or invest in enforcement (e.g., a restricted
-   `require`/`fetch` shim for in-process extensions) before opening the
-   platform to third parties?
+1. ~~Extension permission model at P0~~ — **RESOLVED**, see §9. Trust tier
+   (signed/approved vs. unsigned/dev), not per-permission enforcement — no
+   `require`/`fetch` shim needed at P0.
 2. **Renderer extension host security**: `viewport.tool`/`ui.panel` extensions
    need DOM/WebGL access — do we load them as plain ES modules in the same
    renderer context (simplest, no isolation) or via `<iframe sandbox>` +
    postMessage (safer, matches Figma/Miro plugin models, more engineering)?
    Recommend plain ES modules for P0 (matches the in-process-node trust model
-   already accepted above), revisit before any third-party marketplace.
+   already accepted above) **for signed extensions**; an unsigned extension
+   loaded this way still runs with full DOM/WebGL access despite the warning
+   in §9 — flag this as a real gap (the warning is a liability disclaimer, not
+   a technical sandbox) and revisit before any third-party marketplace.
 3. **Backward compatibility**: does the existing `elegoo-centauri-carbon`
    plugin's manifest need to change shape to fit the new unified schema, or
    does the host accept the current `PrinterExtensionManifest` shape as one
    valid "flavor" indefinitely? Recommend the latter (see HLD §3) to avoid
    redoing verified, working code for a naming exercise.
+
+## 9. Extension Trust Model
+
+Product-owner decision (2026-09-06): a two-tier trust model, not per-permission
+enforcement.
+
+- **Approved extensions**: personally tested by the product owner, then
+  published to an official **store repo** (the P1 mechanism referenced in
+  §6/§7 — not a full marketplace UI yet, just a signed, known-good
+  collection). An approved extension is **signed** and runs with **no read
+  restrictions** — full trust, same as core code. This applies uniformly
+  across all four runtimes (§5): a signed `in-process-renderer` extension gets
+  the same unrestricted DOM/WebGL access a signed `subprocess-host` extension
+  gets unrestricted OS-process access.
+- **Unapproved extensions** (anything not in the store repo — third-party,
+  community, or still under development): load and run normally, but the app
+  surfaces a **liability-disclaimer warning** before enabling one — explicit
+  language that the extension has not been reviewed, and that the app/product
+  owner takes no responsibility for damage to the printer, prints, or
+  anything else it can affect. This is a **legal/UX gate, not a technical
+  sandbox** — an unapproved `in-process-*` extension has the same actual code
+  access as an approved one (see Open Question 2). The warning's job is
+  informed consent, not containment.
+- **Why this is enough for P0/P1**: it matches how the platform is actually
+  going to be used at this stage — a small, product-owner-curated set of
+  "official" extensions (the starter pack: Bambu/Elegoo connectivity, Arachne
+  engine, core viewport tools) plus whatever a developer/tinkerer chooses to
+  load themselves, eyes open. It defers the harder problem (real code
+  sandboxing for a public marketplace with untrusted authors) to P2+, without
+  blocking anything in the meantime.
+- **Signing mechanism** (implementation detail, see HLD §7): a manifest-level
+  signature field, verified against a public key bundled with the app at
+  build time; the store repo (wherever it's hosted — TBD, ties into PRD v1
+  §8's original "artifact storage" open question) is the only party that can
+  produce a valid signature, since only it holds the private key.
+
+## 10. UI Modes: Simple vs. Advanced
+
+Two first-class UI modes, switchable per-user (not per-install) — this is a
+**composition concern**, not a new runtime or contribution point: both modes
+are built from the same extensions (§3), just assembled differently.
+
+- **Simple mode**: a guided, wizard-driven flow for beginners to go from "I
+  have a model" to "it's printing" with minimal decisions. Built as a
+  sequence of `wizard.step` contributions (§3, §7 P1) — e.g. pick/browse a
+  model (potentially via a `content.repository` extension — see below),
+  auto-suggest printer + filament from what's already configured, one-click
+  slice with sensible defaults, send to print. Advanced settings (per-object
+  overrides, engine parameter tuning, viewport tool details) are hidden
+  entirely in this mode, not just collapsed.
+- **Advanced mode**: the traditional full-featured slicer UX — the direction
+  this app already had (filament/printer profile management, model editing
+  via `viewport.tool` extensions, full slicing settings via the three-tier
+  override model, post-slicing processing such as a "true color print"
+  `gcode.postProcessor` — multi-material/color-change G-code injection — and
+  a print manager surfacing `printer.connection` status/controls across all
+  configured printers).
+- **`content.repository` as its own contribution point** — yes: MakerWorld/
+  Printables/NexPrint-style browsing is exactly the shape of the taxonomy's
+  other categories (a well-defined capability — search, fetch model +
+  metadata — that varies per source but shares one contract). It's useful in
+  *both* modes (Simple mode's guided model-picker step, Advanced mode's
+  ordinary "Import from..." menu item), which is why it's a contribution
+  point on its own rather than something bolted only onto the Simple-mode
+  wizard.
+- **Mode is a rendering/composition choice in the renderer**, not a different
+  build or a different set of loaded extensions — switching modes doesn't
+  reload extensions, it changes which `viewport.tool`/`ui.panel`/`wizard.step`
+  contributions the shell actually renders. This keeps "extend without
+  forking" true for mode-specific UI too: a third-party extension can declare
+  it belongs in Simple mode, Advanced mode, or both.

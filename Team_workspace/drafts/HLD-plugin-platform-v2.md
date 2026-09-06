@@ -85,18 +85,30 @@ interface ExtensionManifest {
   contributes: ContributionDeclaration[]
   minVersion?: string
   maxVersion?: string
+  /** Present only on store-repo-approved extensions -- see §7. Absent/invalid
+   *  signature = "unapproved", triggers the liability-disclaimer flow, never
+   *  a load failure. */
+  signature?: string
 }
+
+/** Which top-level UI mode(s) a UI-facing contribution appears in (§8).
+ *  Omit entirely for contributions with no mode-specific meaning
+ *  (printer.profile, engine.slicer, printer.connection, etc. show up in
+ *  both modes' underlying data/logic regardless). */
+type UiMode = 'simple' | 'advanced' | 'both'
 
 type ContributionDeclaration =
   | { point: 'printer.profile'; data: PrinterProfile[] }
   | { point: 'filament.profile'; data: FilamentProfile[] }
   | { point: 'printer.connection'; export: string }        // export name implementing PrinterExtensionPlugin-shaped contract
   | { point: 'engine.slicer'; export: string }              // implements EngineInvokeRequest/Result contract
-  | { point: 'viewport.tool'; export: string; icon: string; label: string }
+  | { point: 'viewport.tool'; export: string; icon: string; label: string; mode?: UiMode }
   | { point: 'format.importer' | 'format.exporter'; export: string; extensions: string[] }
   | { point: 'gcode.postProcessor'; export: string }
-  | { point: 'ui.panel'; export: string; placement: 'sidebar' | 'bottom' }
+  | { point: 'ui.panel'; export: string; placement: 'sidebar' | 'bottom'; mode?: UiMode }
   | { point: 'automation.listener'; export: string; events: string[] }
+  | { point: 'content.repository'; export: string; sourceName: string }  // implements search()/fetchModel() contract, e.g. MakerWorld/Printables/NexPrint
+  | { point: 'wizard.step'; export: string; wizardId: string; order: number }  // wizardId groups steps into one flow, e.g. "simple-new-print"
   // 'wizard.step' and 'ui.theme' contribution shapes: designed in P2, not
   // frozen here — adding a new union member later doesn't break existing
   // manifests (see §3, forward-compatibility).
@@ -203,35 +215,96 @@ src/renderer/extensionHost/
 | 4 | Build the renderer extension host (§5) + `TransformControls`-based Move/Rotate/Scale as the first real `viewport.tool` extensions | Medium — new subsystem, but additive to `ModelViewer.tsx` (existing orbit controls/wireframe untouched) |
 | 5 | Migrate `printers.json`'s static catalog into `printer.profile` contributions from extension manifests (Elegoo entries become the first real example) — bundled JSON stays as the *fallback* data-only extension, not deleted | Low |
 | 6 | Decide the `arcane-engine` duplication per PRD §7 (P0 starter extension) — both runtimes stay available under the registry; pick which one (or both) ships as "starter," which stays as reference/example | Needs product decision, not just code |
+| 7 | Add `signature` field + verification to `extensionRegistry.ts` (§7) — sign the P0 starter extensions as the first "approved" set; everything else defaults to the unapproved-warning path | Low — additive, defaults to today's implicit-trust behavior for anything unsigned |
+| 8 | Build `AppShell.tsx`'s mode toggle + `SimpleModeShell.tsx` (§8), starting with a minimal "simple-new-print" `wizard.step` sequence (pick model → pick printer/filament → slice → send) | Medium — new UI surface, but Advanced mode (existing `MainWindow.tsx`) stays the default and is untouched |
 
 Each step is independently shippable and testable — no phase requires the next
 one to exist first, matching this repo's existing "buildable increment" norm
 (see prior HLD's Phase 0 structure).
 
-## 7. Security Notes (carried from PRD §8)
+## 7. Trust Model Implementation (per PRD §9)
 
-- `in-process-node`/`in-process-renderer` extensions run with full trust —
-  same as the app's own code. This is acceptable for P0 (bundled + user-
-  installed-by-hand extensions, no marketplace), matches VS Code's own
-  extension trust model at a comparable stage.
+Two-tier, signature-based, **not** per-permission enforcement:
+
+- **Signing**: an approved extension's manifest (minus the `signature` field
+  itself) is hashed and signed with a private key held only by whoever
+  maintains the store repo (today: the product owner). The public key ships
+  bundled with the app (`src/main/services/extensionRegistry.ts` or a small
+  co-located constant/asset). At load time, the registry:
+  1. Computes the hash of the manifest (excluding `signature`).
+  2. Verifies `signature` against the bundled public key.
+  3. Marks the extension `approved: true` on success, `approved: false` on a
+     missing/invalid signature — **never** refuses to load either way.
+- **Unapproved-extension warning**: when the user tries to *enable* (not just
+  load — loading/listing is fine) an extension with `approved: false`, the UI
+  shows a blocking confirmation dialog with the liability-disclaimer text
+  (§9 in the PRD) before the enable takes effect. This is a one-time gate per
+  extension (like the existing `plugins.json` enabled-state persistence in
+  `pluginManager.ts` — reuse that pattern, add an `acknowledgedRisk: boolean`
+  field alongside `enabled`).
+- **No technical sandbox difference between tiers** — this is explicitly a
+  legal/UX gate (§9 in the PRD), not a security boundary. An unapproved
+  `in-process-node`/`in-process-renderer` extension has identical code access
+  to an approved one once the user clicks through the warning. Only
+  `subprocess-host` provides real isolation, independent of signing status.
+- `permissions` array stays fully declarative (documentation shown in the
+  warning dialog / extension info panel), never enforced — this closes PRD
+  §8's old open question 1 without building the `require`/`fetch` shim that
+  question raised; the shim is now explicitly out of scope unless a future
+  public marketplace with untrusted authors demands real sandboxing (P2+).
 - `subprocess-host` remains the only real isolation boundary — anything
-  needing genuine fault/license isolation (GPL code, untrusted binaries) must
-  use it. The registry should refuse to load a manifest that declares GPL-
-  family `license` with a non-`subprocess-host` `runtime` and surface a clear
-  warning (not a hard block — the arcane-engine TS version currently violates
-  this and needs a product decision, not a silent crash).
-- `permissions` array stays declarative-only at P0 (documentation, not
-  enforcement) for `in-process-*` runtimes — real enforcement (restricted
-  `require`/`fetch` shims) is a P1+ investment, per PRD §8 open question 1.
+  needing genuine fault/license isolation (GPL code, untrusted binaries)
+  should use it regardless of signing status. The registry should surface a
+  warning (not a hard block) when a manifest declares a GPL-family `license`
+  with a non-`subprocess-host` `runtime` — the arcane-engine TS version
+  currently does this and needs a product decision, not a silent crash.
 
-## 8. What this HLD deliberately does not redesign
+## 8. UI Mode Composition (per PRD §10)
+
+Simple/Advanced mode is a **shell-level rendering decision**, not a different
+extension set or a different app build:
+
+```
+src/renderer/
+  ├── AppShell.tsx          // reads uiMode from settings ('simple'|'advanced'),
+  │                          //   passes it down; toggled from a persistent
+  │                          //   header control, persisted like today's
+  │                          //   settings:get/settings:set (ConfigWizard's
+  │                          //   pattern)
+  ├── SimpleModeShell.tsx    // (new) renders the wizard.step sequence for
+  │                          //   wizardId "simple-new-print", ordered by
+  │                          //   each contribution's `order` field
+  └── MainWindow.tsx         // (existing) Advanced mode -- unchanged, plus
+                              //   filters ToolbarSlot/panel registrations by
+                              //   `mode: 'advanced'|'both'`
+```
+
+- The extension registry doesn't know or care about UI mode — it indexes
+  every contribution regardless of `mode`. Filtering by mode happens purely
+  in the renderer shell when deciding what to render, per PRD §10's "switching
+  modes doesn't reload extensions."
+- `wizard.step` contributions for the same `wizardId` are sorted by `order`
+  and rendered as a linear step sequence by `SimpleModeShell`; a `content.
+  repository` extension used as a Simple-mode step is just a `viewport.tool`-
+  shaped or `ui.panel`-shaped renderer that also happens to be invoked from
+  inside a wizard step, not a different runtime.
+- P0 has no Simple mode yet (per PRD §7, it's P1) — this section documents
+  the target shape so P0's `ExtensionHostProvider`/`ToolbarSlot` (§5) are
+  built with the `mode` filter in mind from the start, rather than needing a
+  rework when Simple mode arrives.
+
+## 9. What this HLD deliberately does not redesign
 
 - The subprocess protocol (REST/SSE/SignalR) between Electron and
   `kuziSlicer.PluginHost` — unchanged, works, tested.
 - The SDCP/Bambu wire protocols themselves — unchanged, verified working.
 - The existing three-tier settings override model (`overrideEngine.ts`) —
   orthogonal to extensions, not touched.
-- Any UI visual design beyond "there is now a toolbar slot for tools" — icon
-  design, exact toolbar layout, and panel visual design are implementation
-  details for whoever builds the first `viewport.tool` extensions, not
-  architecture.
+- Any UI visual design beyond "there is now a toolbar slot for tools" and "two
+  top-level modes" — icon design, exact toolbar layout, wizard step visual
+  design, and panel visual design are implementation details for whoever
+  builds the first `viewport.tool`/`wizard.step` extensions, not architecture.
+- The store repo's actual hosting/distribution mechanism (GitHub releases?
+  a dedicated service?) and the signing tool/CI step that produces
+  `signature` values — both still open, tie into PRD v1 §8's original
+  "artifact storage" question.
