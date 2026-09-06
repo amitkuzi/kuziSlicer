@@ -11,6 +11,9 @@ import ProfilesManager from './services/profilesManager'
 import ProfilesAccessor from './services/profilesAccessor'
 import { ConfiguredPrinter } from '../types/ipc'
 import GcodeValidationEngine from './services/engines/gcodeValidationEngine'
+import { printerExtensions } from '../printer-extensions/registry'
+import { bounded, runPrint } from '../printer-extensions/core/runner'
+import type { PrinterConnection } from '../printer-extensions/core/types'
 
 let mainWindow: BrowserWindow | null = null
 let pluginHostClient: PluginHostClient | null = null
@@ -143,6 +146,20 @@ ipcMain.handle('gcode:estimate-weight', async (_event, modelPath: string, filame
 ipcMain.handle('printer:list', async () => {
   // Phase 3: will call Bonjour discovery. For now, empty.
   return []
+})
+
+ipcMain.handle('printer:extensions', () => printerExtensions.list())
+ipcMain.handle('printer:extension-print', async (_event, data: { extension: string; connection: PrinterConnection; bytes: Uint8Array; nozzle: number }) => {
+  try { return await runPrint(printerExtensions.get(data.extension), data.connection, new Uint8Array(data.bytes), data.nozzle) }
+  catch (error) { return { success: false, message: error instanceof Error ? error.message : 'Print failed' } }
+})
+ipcMain.handle('printer:extension-status', async (_event, data: { extension: string; connection: PrinterConnection }) => {
+  const client = printerExtensions.get(data.extension).connect(data.connection)
+  try { return await bounded(signal => client.status(signal)) } finally { client.close() }
+})
+ipcMain.handle('printer:extension-control', async (_event, data: { extension: string; connection: PrinterConnection; command: 'pause' | 'resume' | 'stop' }) => {
+  const client = printerExtensions.get(data.extension).connect(data.connection)
+  try { await bounded(signal => client.control(data.command, signal)); return { success: true } } finally { client.close() }
 })
 
 ipcMain.handle('gcode:send', async (_event, data: { printer: string; gcode: string }) => {

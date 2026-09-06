@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { ConfiguredPrinter } from '../../../types/ipc'
+import { RapidPrinterPanel } from '../RapidPrinterPanel'
 
 interface GcodeStats {
   lines: number
@@ -373,7 +374,7 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
             <div className="px-3 py-2 border-b border-fg2/10 flex items-center gap-2 bg-ground/50">
               <span className="text-xs text-fg2">LAN Only Mode (printer screen &rarr; Network):</span>
               <input
-                type="text"
+                type="password"
                 value={bambuAccessCode}
                 onChange={(e) => setBambuAccessCode(e.target.value)}
                 placeholder="Access Code"
@@ -388,6 +389,8 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
               />
             </div>
           )}
+
+          {selectedPrinterObj?.model.startsWith('bambulab-a1-mini') && <RapidPrinterPanel key={selectedPrinterObj.id} printer={selectedPrinterObj} accessCode={bambuAccessCode} serialNumber={bambuSerialNumber} />}
 
           {isElegooPrinter(selectedPrinterObj) && (
             <div className="px-3 py-2 border-b border-fg2/10 flex items-center gap-2 bg-ground/50">

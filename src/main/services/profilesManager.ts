@@ -8,6 +8,7 @@ import * as fs from 'fs'
 import { app } from 'electron'
 import { PrinterProfile, FilamentProfile } from './gcodeGenerator'
 import ProfilesAccessor from './profilesAccessor'
+import { printerExtensions } from '../../printer-extensions/registry'
 
 export interface ProfilesData {
   readonly printers: ReadonlyArray<PrinterProfile>
@@ -20,7 +21,7 @@ export class ProfilesManager {
    * Bundled profiles are defaults; user profiles override by ID.
    */
   static loadProfiles(): ProfilesData {
-    const bundledPrinters: PrinterProfile[] = this.loadBundledProfiles('printers')
+    const bundledPrinters: PrinterProfile[] = printerExtensions.profiles()
     const bundledFilaments: FilamentProfile[] = this.loadBundledProfiles('filaments')
     const userDataPath = app.getPath('userData')
     const userPrintersPath = path.join(userDataPath, 'printers.json')
