@@ -33,9 +33,9 @@ const DEFAULT_SETTINGS: PrintSettingsState = {
 const NOZZLE_SIZES = [0.4, 0.6]
 
 const SIMPLE_STEPS = [
-  { key: 'model', title: 'Model' },
-  { key: 'printer', title: 'Printer & Filament' },
-  { key: 'quality', title: 'Quality' },
+  { key: 'model', title: 'Model', hint: 'Pick the 3D file you want to print.' },
+  { key: 'printer', title: 'Printer & Filament', hint: "Choose your printer and material — we'll set the right temperatures for you." },
+  { key: 'quality', title: 'Quality', hint: 'Higher quality and infill print stronger parts, but take longer.' },
 ] as const
 
 interface SectionProps {
@@ -326,9 +326,10 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               </React.Fragment>
             ))}
           </div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg2">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg2">
             Step {wizardStep + 1} of {SIMPLE_STEPS.length} — {SIMPLE_STEPS[wizardStep].title}
           </p>
+          <p className="mb-3 text-sm text-fg">{SIMPLE_STEPS[wizardStep].hint}</p>
 
           <div className="flex-1 space-y-3">
             {wizardStep === 0 && (
@@ -440,7 +441,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               disabled={wizardStep === 0}
               className="flex-1 px-3 py-2 text-sm bg-fg2/10 hover:bg-fg2/20 text-fg rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Back
+              ← Back
             </button>
             {wizardStep < SIMPLE_STEPS.length - 1 ? (
               <button
@@ -451,7 +452,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
                 }
                 className="flex-1 px-3 py-2 text-sm bg-ember hover:bg-ember/90 text-onEmber rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Next
+                Next →
               </button>
             ) : (
               <p className="flex-1 self-center text-center text-xs text-fg2">
@@ -459,6 +460,12 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               </p>
             )}
           </div>
+          {wizardStep === 0 && !modelPath && (
+            <p className="mt-2 text-xs text-fg2">Load a model above to continue.</p>
+          )}
+          {wizardStep === 1 && (!settings.printer || !settings.filament) && (
+            <p className="mt-2 text-xs text-fg2">Pick a printer and a filament to continue.</p>
+          )}
         </div>
       ) : (
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
