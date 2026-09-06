@@ -20,6 +20,7 @@
 | UX-5 | חיבור פעולת Load/Change Model ל-3D Viewer | UX-2 | ✅ בוצע |
 | UX-6 | Build + בדיקת UI ידנית בשני המצבים | UX-2..UX-5 | ✅ עבר |
 | UX-7 | קבלה: STL → פרופילים → G-code → preview/send | UX-6 | ⚠ pipeline אוטומטי עבר; print אמיתי לא נשלח |
+| UX-8 | Simple הוסב לאשף מודרך צעד-אחר-צעד (Model → Printer/Filament → Quality) עם מד-התקדמות ו-Back/Next, לפי כיוון PRD §12/§8 "guided wizards" | UX-3 | ✅ בוצע (`PrintSettings.tsx`); `tsc --noEmit` נקי, בדיקת UI חיה ב-Electron עדיין לביצוע |
 
 ```mermaid
 flowchart LR

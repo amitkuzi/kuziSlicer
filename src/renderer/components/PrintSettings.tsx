@@ -32,6 +32,12 @@ const DEFAULT_SETTINGS: PrintSettingsState = {
 
 const NOZZLE_SIZES = [0.4, 0.6]
 
+const SIMPLE_STEPS = [
+  { key: 'model', title: 'Model' },
+  { key: 'printer', title: 'Printer & Filament' },
+  { key: 'quality', title: 'Quality' },
+] as const
+
 interface SectionProps {
   title: string
   children: React.ReactNode
@@ -94,6 +100,13 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
     temperature: false,
     speed: false,
   })
+  const [wizardStep, setWizardStep] = useState(0)
+
+  // Reset to step 1 whenever the user switches into Simple mode, so the
+  // guided flow always starts fresh rather than resuming mid-wizard.
+  useEffect(() => {
+    if (mode === 'simple') setWizardStep(0)
+  }, [mode])
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -290,6 +303,164 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
       </div>
 
       {/* Settings Sections */}
+      {mode === 'simple' ? (
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+          {/* Step progress */}
+          <div className="flex items-center gap-2 mb-4">
+            {SIMPLE_STEPS.map((step, i) => (
+              <React.Fragment key={step.key}>
+                <div
+                  className={`flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-xs font-bold ${
+                    i === wizardStep
+                      ? 'bg-ember text-onEmber'
+                      : i < wizardStep
+                      ? 'bg-ember/20 text-ember'
+                      : 'bg-fg2/10 text-fg2'
+                  }`}
+                >
+                  {i < wizardStep ? '✓' : i + 1}
+                </div>
+                {i < SIMPLE_STEPS.length - 1 && (
+                  <div className={`flex-1 h-0.5 ${i < wizardStep ? 'bg-ember/40' : 'bg-fg2/10'}`} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg2">
+            Step {wizardStep + 1} of {SIMPLE_STEPS.length} — {SIMPLE_STEPS[wizardStep].title}
+          </p>
+
+          <div className="flex-1 space-y-3">
+            {wizardStep === 0 && (
+              <>
+                <FormField label="Select Model">
+                  <p className="truncate rounded bg-raised px-3 py-2 text-sm text-fg">
+                    {settings.modelName || 'No model loaded'}
+                  </p>
+                </FormField>
+                <button
+                  onClick={onRequestModel}
+                  className="w-full px-3 py-2 text-sm bg-ember hover:bg-ember/90 text-onEmber rounded font-medium transition-colors"
+                >
+                  {modelPath ? 'Change Model' : 'Load Model'}
+                </button>
+              </>
+            )}
+
+            {wizardStep === 1 && (
+              <>
+                <FormField label={`Printer (${printers.length} available)`}>
+                  <select
+                    value={settings.printer}
+                    onChange={(e) => handlePrinterChange(e.target.value)}
+                    className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember cursor-pointer"
+                  >
+                    <option value="">Select a printer...</option>
+                    {printers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+                <FormField label={`Filament (${filaments.length} available)`}>
+                  <select
+                    value={settings.filament}
+                    onChange={(e) => handleFilamentChange(e.target.value)}
+                    className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember cursor-pointer"
+                  >
+                    <option value="">Select filament...</option>
+                    {filaments.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              </>
+            )}
+
+            {wizardStep === 2 && (
+              <>
+                <FormField label={`Layer Height: ${settings.layerHeight}mm`}>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="0.4"
+                    step="0.05"
+                    value={settings.layerHeight}
+                    onChange={(e) => handleSettingChange('layerHeight', parseFloat(e.target.value))}
+                    className="w-full h-2 bg-fg2/20 rounded appearance-none cursor-pointer accent-ember"
+                  />
+                  <div className="flex gap-2 text-xs text-fg2">
+                    <span>0.1mm (fine)</span>
+                    <span className="flex-1"></span>
+                    <span>0.4mm (fast)</span>
+                  </div>
+                </FormField>
+                <FormField label={`Infill: ${settings.infillPercentage}%`}>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={settings.infillPercentage}
+                    onChange={(e) => handleSettingChange('infillPercentage', parseInt(e.target.value))}
+                    className="w-full h-2 bg-fg2/20 rounded appearance-none cursor-pointer accent-ember"
+                  />
+                  <div className="flex gap-2 text-xs text-fg2">
+                    <span>0%</span>
+                    <span className="flex-1"></span>
+                    <span>100%</span>
+                  </div>
+                </FormField>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-fg2">Supports</label>
+                  <button
+                    onClick={() => handleSettingChange('supportEnabled', !settings.supportEnabled)}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      settings.supportEnabled ? 'bg-ember' : 'bg-fg2/20'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                        settings.supportEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Step navigation */}
+          <div className="flex gap-2 mt-4 pt-3 border-t border-fg2/10">
+            <button
+              onClick={() => setWizardStep((s) => Math.max(0, s - 1))}
+              disabled={wizardStep === 0}
+              className="flex-1 px-3 py-2 text-sm bg-fg2/10 hover:bg-fg2/20 text-fg rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Back
+            </button>
+            {wizardStep < SIMPLE_STEPS.length - 1 ? (
+              <button
+                onClick={() => setWizardStep((s) => Math.min(SIMPLE_STEPS.length - 1, s + 1))}
+                disabled={
+                  (wizardStep === 0 && !modelPath) ||
+                  (wizardStep === 1 && (!settings.printer || !settings.filament))
+                }
+                className="flex-1 px-3 py-2 text-sm bg-ember hover:bg-ember/90 text-onEmber rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            ) : (
+              <p className="flex-1 self-center text-center text-xs text-fg2">
+                Ready — hit Generate G-code below
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {/* Model Selection */}
         <CollapsibleSection
@@ -511,6 +682,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
           </FormField>
         </CollapsibleSection>}
       </div>
+      )}
 
       {/* Action Buttons */}
       <div className="p-4 border-t border-fg2/10 space-y-2">
