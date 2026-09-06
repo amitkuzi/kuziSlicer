@@ -1,6 +1,8 @@
-// Self-check for BambuPrinterClient.buildProjectFile -- verifies the .gcode.3mf
-// package it builds is structurally valid (same entries as the template, gcode
-// swapped in, md5 checksum correct) without touching a real printer.
+// Self-check for the legacy BambuPrinterClient.buildProjectFile (kept for offline
+// compatibility tests only -- real hardware dispatch goes through the
+// bambulab-a1-mini rapid printer extension instead, see PRD-plugin-platform-v2 §5/§7).
+// Verifies the .gcode.3mf package it builds is structurally valid (template entries
+// preserved, gcode + md5 swapped in) without touching a real printer.
 // Run: node scripts/test-bambuPackaging.mjs
 import assert from 'node:assert/strict'
 import path from 'node:path'
@@ -42,23 +44,13 @@ assert.equal(
   'md5 checksum entry should match the gcode content'
 )
 
-// Non-gcode, non-thumbnail entries must survive untouched from the template.
-// Thumbnails (Metadata/*.png) are deliberately replaced -- they'd otherwise show
-// whatever object the template was originally captured from, which is misleading.
-const swappedEntries = Object.keys(entries).filter(
-  (k) => k === 'Metadata/plate_1.gcode' || k === 'Metadata/plate_1.gcode.md5' || (k.startsWith('Metadata/') && k.endsWith('.png'))
+// Everything else must survive untouched from the template
+const untouchedEntries = Object.keys(entries).filter(
+  (k) => k !== 'Metadata/plate_1.gcode' && k !== 'Metadata/plate_1.gcode.md5'
 )
-const untouchedEntries = Object.keys(entries).filter((k) => !swappedEntries.includes(k))
 assert.ok(untouchedEntries.includes('3D/3dmodel.model'), 'template 3D model entry should be preserved')
 assert.ok(untouchedEntries.includes('_rels/.rels'), 'template rels entry should be preserved')
 assert.ok(untouchedEntries.includes('[Content_Types].xml'), 'template content-types entry should be preserved')
-assert.ok(untouchedEntries.length >= 6, 'non-thumbnail template metadata (settings, etc.) should be preserved')
+assert.ok(untouchedEntries.length >= 10, 'template metadata (thumbnails, settings, etc.) should be preserved')
 
-const thumbnailKeys = Object.keys(entries).filter((k) => k.startsWith('Metadata/') && k.endsWith('.png'))
-assert.ok(thumbnailKeys.length > 0, 'template should have at least one thumbnail to verify replacement on')
-for (const key of thumbnailKeys) {
-  const png = Buffer.from(entries[key])
-  assert.deepEqual(png.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), `${key} should still be a valid PNG`)
-}
-
-console.log(`PASS: buildProjectFile produces a valid .gcode.3mf (${untouchedEntries.length} template entries preserved, gcode + md5 swapped, ${thumbnailKeys.length} stale thumbnails replaced with valid placeholders)`)
+console.log(`PASS: buildProjectFile produces a valid .gcode.3mf (${untouchedEntries.length} template entries preserved, gcode + md5 swapped correctly)`)
