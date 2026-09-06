@@ -3,7 +3,7 @@
 	url = https://github.com/amitkuzi/amitkuzi-brandkit.git
 [submodule "src/plugins/extensions"]
 	path = src/plugins/extensions
-	url = https://github.com/amitkuzi/kuziSlicer.extensions.git
+	url = https://github.com/amitkuzi/kuziSlicer.Extensions.git
 [submodule "src/plugins/PluginHost"]
 	path = src/plugins/PluginHost
 	url = https://github.com/amitkuzi/kuziSlicer.PluginHost.git

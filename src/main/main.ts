@@ -5,7 +5,7 @@ import * as net from 'net'
 import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings } from './services/gcodeGenerator'
 import PluginHostClient from './clients/pluginHostClient'
 import BambuPrinterClient from './clients/bambuPrinterClient'
-import ElegooPrinterClient from './clients/elegooPrinterClient'
+import elegooCentauriCarbon from '../plugins/extensions/plugins/elegoo-centauri-carbon/src/index'
 import PluginManager from './services/pluginManager'
 import ProfilesManager from './services/profilesManager'
 import ProfilesAccessor from './services/profilesAccessor'
@@ -187,18 +187,17 @@ ipcMain.handle('printer:elegoo-print', async (_event, data: { ip: string; gcode:
     return { success: false, message: `Print blocked by G-code safety checks: ${validation.errors.join(' ')}` }
   }
   const uniqueFileName = `kuziSlicer_${Date.now()}_${validation.layerCount}L.gcode`
-  return ElegooPrinterClient.uploadAndPrint({
-    ip: data.ip,
-    gcode: data.gcode,
-    // Never overwrite a previous remote name: the CC1 file index can retain
-    // stale layer/thumbnail metadata for an in-place replacement.
-    fileName: uniqueFileName,
-  })
+  const conn = { ip: data.ip }
+    fileName: data.fileName || `kuziSlicer_print_${Date.now()}.gcode`,
+  try {
+  } catch (err) {
+    return { success: false, message: err instanceof Error ? err.message : String(err) }
+  }
 })
 
 ipcMain.handle('printer:elegoo-snapshot', async (_event, data: { ip: string }) => {
   try {
-    const buffer = await ElegooPrinterClient.captureSnapshot(data.ip)
+    const buffer = await elegooCentauriCarbon.captureSnapshot!({ ip: data.ip })
     return { success: true, dataUrl: `data:image/jpeg;base64,${buffer.toString('base64')}` }
   } catch (err) {
     return { success: false, message: err instanceof Error ? err.message : String(err) }
