@@ -1,0 +1,17 @@
+{
+  "name": "printer-template",
+  "title": "Printer extension template",
+  "type": "rapid printer extension",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "interfaceVersion": "1.0.0",
+  "description": "Printer extension template",
+  "author": "kuziSlicer",
+  "license": "GPL-3.0-or-later",
+  "entrypoint": "index.ts",
+  "firmware": [],
+  "permissions": [
+    "file-read",
+    "network"
+  ]
+}

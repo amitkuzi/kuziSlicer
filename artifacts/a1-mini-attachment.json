@@ -1,0 +1,14 @@
+{
+  "at": "2026-09-06T07:44:41.170Z",
+  "offline": "passed",
+  "package": {
+    "sha256": "5284ad1764cfef8c6b8993d1047dd579e3d17750b4ce320fb978ebbb53d1360b",
+    "model": "Bambu Lab A1 mini",
+    "nozzle": 0.4,
+    "plate": "Metadata/plate_3.gcode",
+    "bytes": 120618,
+    "validation": "passed"
+  },
+  "hardware": "not-run",
+  "completion": "not-verified"
+}

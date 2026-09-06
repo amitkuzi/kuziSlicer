@@ -1,3 +1,4 @@
+ 
 /**
  * Bambu Lab LAN-mode print client.
  * Bambu firmware (X1/P1/A1 series) locks network control behind LAN Only Mode:
@@ -272,5 +273,6 @@ export class BambuPrinterClient {
     })
   }
 }
-
-export default BambuPrinterClient
+export { default, BambuPrinterClient } from '../../printer-extensions/bambu-legacy/client'
+export type { BambuPrintOptions, BambuPrintResult } from '../../printer-extensions/bambu-legacy/client'
+ 

@@ -20,10 +20,17 @@
     "test:pluginmanager": "node scripts/test-pluginManager.mjs",
     "test:overrideengine": "node scripts/test-overrideEngine.mjs",
     "test:gcodepipeline": "node scripts/test-gcodePipeline.mjs",
+    "test:gcodevalidation": "node scripts/test-gcodeValidation.mjs",
+    "test:elegooslicer": "node scripts/test-elegooSlicer.mjs",
+    "test:elegooprotocol": "node scripts/test-elegooProtocol.mjs",
     "test:bambupackaging": "node scripts/test-bambuPackaging.mjs",
     "start": "cross-env NODE_ENV=production electron .",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "test:printerextensions": "node scripts/test-rapidPrinterExtensions.mjs && node scripts/test-rapidPrinterPrepare.mjs && node scripts/test-rapidPrinterRegistry.mjs && node scripts/test-rapidPrinterTransport.mjs",
+    "test:plugintemplates": "node scripts/test-pluginTemplates.mjs && node src/plugins/PluginHost/templates/tests/smoke.mjs",
+    "printer:bench": "node scripts/printer-extension-bench.mjs",
+    "printer:new": "node scripts/create-printer-extension.mjs"
   },
   "dependencies": {
     "axios": "^1.6.0",
@@ -63,7 +70,8 @@
       "dist/index.html",
       "dist/assets/**/*",
       "node_modules/**/*",
-      "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,test,__tests__,tests,powered-test,example,examples,*.d.ts}"
+      "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,test,__tests__,tests,powered-test,example,examples,*.d.ts}",
+      "dist/preload.js"
     ],
     "directories": {
       "buildResources": "brandkit"
@@ -78,6 +86,22 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "extraResources": [
+      {
+        "from": "src/printer-extensions",
+        "to": "printer-extensions",
+        "filter": [
+          "**/*.json",
+          "**/*.3mf",
+          "**/LICENSE*",
+          "**/*.md"
+        ]
+      },
+      {
+        "from": "src/data",
+        "to": "data"
+      }
+    ]
   }
 }

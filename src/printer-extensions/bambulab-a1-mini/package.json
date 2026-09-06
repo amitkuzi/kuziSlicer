@@ -1,0 +1,12 @@
+{
+  "name": "@kuzislicer/bambulab-a1-mini",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.ts",
+  "dependencies": {
+    "basic-ftp": "^6.2.1",
+    "mqtt": "^5.15.2",
+    "fflate": "^0.8.3"
+  }
+}
