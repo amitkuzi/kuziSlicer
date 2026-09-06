@@ -186,8 +186,11 @@ for distribution), not a bug to resolve.
   modifier meshes).
 - Calibration wizard suite as additional `wizard.step` extensions.
 - Klipper/Moonraker `printer.connection` extension (moved here from P0 per §4).
-- **Signed-extension trust tier** (§9) — signing/verification mechanism,
-  liability-disclaimer warning UI for unsigned extensions.
+- **Signed-extension trust tier + real sandbox enforcement** (§9) — signing/
+  verification mechanism, liability-disclaimer warning UI, **and** the
+  subprocess/iframe-sandbox isolation for unsigned extensions (elevated from
+  a documentation-only permissions model after security review — see HLD §7).
+  This is now a required P1 item, not an optional hardening pass.
 
 **P2 — Platform maturity**
 - `ui.theme` contribution point.
@@ -198,18 +201,21 @@ for distribution), not a bug to resolve.
 
 ## 8. Open Questions
 
-1. ~~Extension permission model at P0~~ — **RESOLVED**, see §9. Trust tier
-   (signed/approved vs. unsigned/dev), not per-permission enforcement — no
-   `require`/`fetch` shim needed at P0.
-2. **Renderer extension host security**: `viewport.tool`/`ui.panel` extensions
-   need DOM/WebGL access — do we load them as plain ES modules in the same
-   renderer context (simplest, no isolation) or via `<iframe sandbox>` +
-   postMessage (safer, matches Figma/Miro plugin models, more engineering)?
-   Recommend plain ES modules for P0 (matches the in-process-node trust model
-   already accepted above) **for signed extensions**; an unsigned extension
-   loaded this way still runs with full DOM/WebGL access despite the warning
-   in §9 — flag this as a real gap (the warning is a liability disclaimer, not
-   a technical sandbox) and revisit before any third-party marketplace.
+1. ~~Extension permission model at P0~~ — **RESOLVED, revised 2026-09-06**.
+   Running untrusted extension code against an app that controls physical
+   printer hardware is a real security threat, not just a liability question
+   — confirmed by product owner. Real technical protection is **required**,
+   not optional: unsigned/unapproved extensions run under enforced isolation
+   (subprocess for declared `in-process-node`, iframe-sandbox for declared
+   `in-process-renderer`) regardless of what they asked for; only signed/
+   approved extensions get the fast direct-execution path. See §9 and HLD §7
+   for the mechanism. This moves real enforcement into **P1** (not deferred
+   to P2+ as first drafted).
+2. ~~Renderer extension host security~~ — **RESOLVED** by the above: signed
+   extensions use plain ES modules with full scene access (fast path);
+   unsigned extensions are sandboxed via `<iframe sandbox>` + postMessage.
+   Not a P0/P1 split by extension type anymore — it's determined by trust
+   tier for every extension.
 3. **Backward compatibility**: does the existing `elegoo-centauri-carbon`
    plugin's manifest need to change shape to fit the new unified schema, or
    does the host accept the current `PrinterExtensionManifest` shape as one
@@ -230,14 +236,20 @@ enforcement.
   the same unrestricted DOM/WebGL access a signed `subprocess-host` extension
   gets unrestricted OS-process access.
 - **Unapproved extensions** (anything not in the store repo — third-party,
-  community, or still under development): load and run normally, but the app
-  surfaces a **liability-disclaimer warning** before enabling one — explicit
-  language that the extension has not been reviewed, and that the app/product
-  owner takes no responsibility for damage to the printer, prints, or
-  anything else it can affect. This is a **legal/UX gate, not a technical
-  sandbox** — an unapproved `in-process-*` extension has the same actual code
-  access as an approved one (see Open Question 2). The warning's job is
-  informed consent, not containment.
+  community, or still under development): load and run, but under **enforced
+  isolation** — revised 2026-09-06 after product-owner pushback on the initial
+  "warning dialog only" version, which correctly identified that running
+  arbitrary unvetted code against an app controlling physical printer
+  hardware is a real cyber-security threat, not just a liability question. An
+  unapproved extension's declared runtime becomes a *ceiling*, not a
+  guarantee: declared `in-process-node` actually executes in an isolated
+  subprocess with no direct filesystem/network access beyond what its
+  declared `permissions` grants (now **enforced**, not documentation);
+  declared `in-process-renderer` actually executes inside an `<iframe
+  sandbox>` with no direct DOM/Node access beyond an explicit bridged API.
+  The liability-disclaimer warning still appears before first enable —
+  informed consent *in addition to*, not instead of, real containment. See
+  HLD §7 for the mechanism.
 - **Why this is enough for P0/P1**: it matches how the platform is actually
   going to be used at this stage — a small, product-owner-curated set of
   "official" extensions (the starter pack: Bambu/Elegoo connectivity, Arachne

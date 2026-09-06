@@ -242,16 +242,38 @@ Two-tier, signature-based, **not** per-permission enforcement:
   extension (like the existing `plugins.json` enabled-state persistence in
   `pluginManager.ts` — reuse that pattern, add an `acknowledgedRisk: boolean`
   field alongside `enabled`).
-- **No technical sandbox difference between tiers** — this is explicitly a
-  legal/UX gate (§9 in the PRD), not a security boundary. An unapproved
-  `in-process-node`/`in-process-renderer` extension has identical code access
-  to an approved one once the user clicks through the warning. Only
-  `subprocess-host` provides real isolation, independent of signing status.
-- `permissions` array stays fully declarative (documentation shown in the
-  warning dialog / extension info panel), never enforced — this closes PRD
-  §8's old open question 1 without building the `require`/`fetch` shim that
-  question raised; the shim is now explicitly out of scope unless a future
-  public marketplace with untrusted authors demands real sandboxing (P2+).
+- **Real technical enforcement, revised 2026-09-06**: the warning dialog alone
+  was correctly flagged (product-owner call) as insufficient — a slicer
+  controls physical hardware (a printer) and has filesystem/network access;
+  "click through a disclaimer" is not an acceptable security posture for code
+  that isn't vetted. **Trust tier now determines the actual execution
+  boundary, not just whether a dialog appears**:
+  - **Approved (signed)** extensions get the fast path exactly as declared —
+    `in-process-node` runs directly in main, `in-process-renderer` runs as a
+    plain ES module with full scene access (§5). No overhead, because it's
+    vetted.
+  - **Unapproved (unsigned)** extensions are **force-upgraded to an isolated
+    execution boundary regardless of their declared runtime**:
+    - Declared `in-process-node` → actually runs as a restricted
+      `child_process.fork()` (the same subprocess-isolation mechanism
+      `subprocess-host`/`kuziSlicer.PluginHost` already provides, reused
+      here rather than invented twice) with no direct filesystem/network
+      access except through an explicit IPC-mediated API the host exposes —
+      i.e. an unsigned extension's declared `permissions` array becomes the
+      *actual enforced* capability list here, not documentation.
+    - Declared `in-process-renderer` → runs inside a `<iframe sandbox=
+      "allow-scripts">` with a `postMessage` bridge exposing only the
+      specific scene-manipulation calls the host chooses to allow (transform
+      an object, read selection, register a toolbar button) — no direct DOM/
+      window/Node access, matching the Figma/Miro plugin model this was
+      originally floated as an alternative for.
+  - The liability-disclaimer dialog (§9 PRD) still shows before first enable
+    of an unapproved extension — informed consent *in addition to* real
+    isolation, not instead of it.
+  - **This makes `permissions` enforcement a P1 requirement, not deferred
+    P2+** — see PRD §9/§7 priority update. The `require`/`fetch` shim once
+    floated for this is superseded by "just actually isolate the process,"
+    which is more robust than shimming individual APIs.
 - `subprocess-host` remains the only real isolation boundary — anything
   needing genuine fault/license isolation (GPL code, untrusted binaries)
   should use it regardless of signing status. The registry should surface a
