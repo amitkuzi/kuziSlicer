@@ -1,4 +1,5 @@
 // IPC channel types for type-safe electron communication
+import type { PrinterConnection, PrinterStatus, RapidPrinterExtension } from '../printer-extensions/core/types'
 
 export interface Printer {
   id: string
@@ -63,6 +64,10 @@ export interface AppSettings {
 
 // Async invoke channels
 export type InvokeChannels = {
+  'printer:extensions': () => Promise<Array<RapidPrinterExtension['manifest'] & { profiles: RapidPrinterExtension['profiles'] }>>
+  'printer:extension-print': (data: { extension: string; connection: PrinterConnection; bytes: Uint8Array; nozzle: number }) => Promise<{ success: boolean; message: string; job?: string; sha256?: string }>
+  'printer:extension-status': (data: { extension: string; connection: PrinterConnection }) => Promise<PrinterStatus>
+  'printer:extension-control': (data: { extension: string; connection: PrinterConnection; command: 'pause' | 'resume' | 'stop' }) => Promise<{ success: true }>
   'printer:list': () => Promise<Printer[]>
   'file:open': (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ canceled: boolean; filePaths: string[] }>
   'file:read': (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>

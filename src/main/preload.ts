@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld('electron', {
   invoke: (channel: string, ...args: unknown[]) => {
     const validChannels = [
       'printer:list',
+      'printer:extensions',
+      'printer:extension-print',
+      'printer:extension-status',
+      'printer:extension-control',
       'file:open',
       'file:read',
       'file:read-binary',

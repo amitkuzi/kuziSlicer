@@ -44,7 +44,7 @@ export interface PluginManifest {
    * - "exporter": profile export (kuziSlicer profile → external format)
    * - "tool": utility (overhang detection, mesh repair, etc.)
    */
-  type: 'engine' | 'importer' | 'exporter' | 'tool'
+  type: 'engine' | 'importer' | 'exporter' | 'tool' | 'rapid printer extension'
 
   /**
    * Requested sandbox permissions (optional).
@@ -92,7 +92,7 @@ export function validateManifest(manifest: unknown): manifest is PluginManifest 
   if (typeof m.description !== 'string') return false
   if (typeof m.author !== 'string') return false
   if (typeof m.license !== 'string') return false
-  if (!['engine', 'importer', 'exporter', 'tool'].includes(m.type as string)) return false
+  if (!['engine', 'importer', 'exporter', 'tool', 'rapid printer extension'].includes(m.type as string)) return false
   if (typeof m.entrypoint !== 'string') return false
 
   // Optional fields
