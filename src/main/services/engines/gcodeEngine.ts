@@ -8,6 +8,7 @@ import type { PrinterProfile, FilamentProfile, PrintSettings } from '../gcodeGen
 import type { StlGeometry } from './stlEngine'
 import SliceEngine, { Contour, Point2 } from './sliceEngine'
 import { getPattern, solidFill, spacingForDensity, Segment } from './infill'
+import { generateSupports, DEFAULT_SUPPORT_OPTIONS } from './supportEngine'
 
 export interface GcodeEngineOptions {
   geometry: StlGeometry
@@ -52,6 +53,10 @@ export class GcodeEngine {
     const layers = SliceEngine.sliceMesh(opts.geometry, settings.layerHeight)
     const perimeterCount = Math.max(1, Math.round(settings.shellThickness / lineWidth))
 
+    const supports = settings.supportEnabled
+      ? generateSupports(layers, { ...DEFAULT_SUPPORT_OPTIONS, layerHeight: settings.layerHeight })
+      : []
+
     // An open or non-manifold mesh yields no closed loops to trace. Failing loudly beats
     // handing the user a G-code file that runs the printer through an empty print.
     if (!layers.some((layer) => layer.contours.length > 0)) {
@@ -68,6 +73,7 @@ export class GcodeEngine {
     gcode.push(`; Layer Height: ${settings.layerHeight}mm`)
     gcode.push(`; Infill: ${settings.infillDensity}% ${pattern.name}`)
     gcode.push(`; Perimeters: ${perimeterCount}`)
+    gcode.push(`; Supports: ${settings.supportEnabled ? 'on' : 'off'}`)
     gcode.push(`; Layers: ${layers.length}`)
     gcode.push('; ============================================================')
     gcode.push('')
@@ -142,7 +148,10 @@ export class GcodeEngine {
 
     for (let index = 0; index < layers.length; index++) {
       const layer = layers[index]
-      if (layer.contours.length === 0) continue
+      const layerSupports = supports[index] || []
+      // A layer can be support-only: an arm that starts in mid-air has nothing of the
+      // model itself in the layers underneath it.
+      if (layer.contours.length === 0 && layerSupports.length === 0) continue
 
       gcode.push(`; Layer ${index + 1}/${layers.length}`)
       gcode.push(`G1 Z${(layer.z + offsetZ).toFixed(3)} F600`)
@@ -180,6 +189,11 @@ export class GcodeEngine {
             })
           )
         }
+      }
+
+      if (layerSupports.length > 0) {
+        gcode.push(';TYPE:SUPPORT')
+        drawSegments(layerSupports)
       }
 
       gcode.push('')

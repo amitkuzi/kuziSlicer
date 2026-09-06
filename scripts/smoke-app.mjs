@@ -142,22 +142,34 @@ try {
   `)
   await sleep(1200)
 
-  // 3. Switch to Advanced mode so every control is on screen.
-  await cdp.evaluate(`
-    const adv = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Advanced')
-    if (adv) adv.click()
-    return true
-  `)
+  // 3. Switch to Advanced mode so every control is on screen. The first-run wizard can
+  // still be clearing, so retry until the mode toggle is actually reachable.
+  let inAdvanced = false
+  for (let attempt = 0; attempt < 10 && !inAdvanced; attempt++) {
+    inAdvanced = await cdp.evaluate(`
+      const adv = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Advanced')
+      if (!adv) return false
+      if (adv.getAttribute('aria-pressed') !== 'true') adv.click()
+      return true
+    `)
+    if (!inAdvanced) await sleep(600)
+  }
+  check(inAdvanced, 'advanced mode reachable')
   await sleep(800)
 
   // 4. Infill pattern selector is populated from the registry over IPC.
   const infill = await cdp.evaluate(`
     const patterns = await window.electron.invoke('gcode:infill-patterns')
-    const labels = [...document.querySelectorAll('label')].map(l => l.textContent)
-    return { count: patterns.length, ids: patterns.map(p => p.id), hasField: labels.some(l => /Infill Pattern/i.test(l)) }
+    const labels = [...document.querySelectorAll('label')].map(l => l.textContent.trim())
+    return {
+      count: patterns.length,
+      ids: patterns.map(p => p.id),
+      hasField: labels.some(l => /Infill Pattern/i.test(l)),
+      labels: labels.slice(0, 12),
+    }
   `)
   check(infill.count >= 5, 'infill registry exposed over IPC', infill.ids.join(', '))
-  check(infill.hasField, 'infill pattern selector rendered in the sidebar')
+  check(infill.hasField, 'infill pattern selector rendered in the sidebar', infill.hasField ? '' : `visible labels: ${infill.labels.join(' | ')}`)
 
   // 5. Load a real model through the path input (the full-path route slicing needs).
   const loaded = await cdp.evaluate(`

@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url)
 
 const CHECKS = [
   'src/main/services/engines/sliceEngine.test.ts',
+  'src/main/services/engines/supportEngine.test.ts',
   'src/main/services/engines/threeMfEngine.test.ts',
   'src/renderer/utils/gcodeToolpath.test.ts',
 ]
