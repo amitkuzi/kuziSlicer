@@ -22,8 +22,71 @@ import mqtt, { MqttClient } from 'mqtt'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as crypto from 'crypto'
+import * as zlib from 'zlib'
 import { Readable } from 'stream'
 import { unzipSync, zipSync, strToU8 } from 'fflate'
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+let crc32Table: number[] | null = null
+
+function crc32(buf: Buffer): number {
+  if (!crc32Table) {
+    crc32Table = []
+    for (let n = 0; n < 256; n++) {
+      let c = n
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+      crc32Table[n] = c >>> 0
+    }
+  }
+  let crc = 0xffffffff
+  for (const byte of buf) crc = crc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8)
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const typeBuf = Buffer.from(type, 'ascii')
+  const lenBuf = Buffer.alloc(4)
+  lenBuf.writeUInt32BE(data.length, 0)
+  const crcBuf = Buffer.alloc(4)
+  crcBuf.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0)
+  return Buffer.concat([lenBuf, typeBuf, data, crcBuf])
+}
+
+/** Reads width/height from a PNG's IHDR chunk (bytes 16-23). */
+function readPngDimensions(png: Uint8Array): { width: number; height: number } {
+  const buf = Buffer.from(png)
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
+}
+
+/** Builds a minimal solid-color RGB PNG of the given size -- used as an honest
+ * "no preview available" placeholder in place of a stale thumbnail. */
+function buildSolidPng(width: number, height: number, rgb: [number, number, number]): Buffer {
+  const [r, g, b] = rgb
+  const row = Buffer.alloc(1 + width * 3) // filter byte + RGB pixels
+  for (let x = 0; x < width; x++) {
+    row[1 + x * 3] = r
+    row[1 + x * 3 + 1] = g
+    row[1 + x * 3 + 2] = b
+  }
+  const raw = Buffer.concat(Array(height).fill(row))
+  const idatData = zlib.deflateSync(raw)
+
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 8 // bit depth
+  ihdr[9] = 2 // color type: RGB
+  ihdr[10] = 0
+  ihdr[11] = 0
+  ihdr[12] = 0
+
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', idatData),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ])
+}
 
 export interface BambuPrintOptions {
   ip: string
@@ -57,6 +120,7 @@ export class BambuPrinterClient {
     } catch (err) {
       return { success: false, message: `Failed to build project package: ${err instanceof Error ? err.message : String(err)}` }
     }
+    const packageMd5 = crypto.createHash('md5').update(packageBuffer).digest('hex')
 
     console.log(`[Bambu] FTPS: uploading ${remoteFileName} (${packageBuffer.length} bytes) to ${opts.ip} ...`)
     try {
@@ -68,7 +132,7 @@ export class BambuPrinterClient {
     }
 
     try {
-      await this.sendPrintCommand(opts.ip, opts.accessCode, opts.serialNumber, remoteFileName)
+      await this.sendPrintCommand(opts.ip, opts.accessCode, opts.serialNumber, remoteFileName, packageMd5)
       console.log('[Bambu] MQTT: print command acknowledged')
     } catch (err) {
       console.error('[Bambu] MQTT: print command failed:', err)
@@ -97,6 +161,16 @@ export class BambuPrinterClient {
     entries[this.TEMPLATE_ENTRY] = gcodeBytes
     entries[this.TEMPLATE_MD5_ENTRY] = strToU8(md5)
 
+    // The template's preview thumbnails belong to whatever object it was captured
+    // from -- swap each for a neutral placeholder (same dimensions) so the printer
+    // screen doesn't show a stale, misleading object for the new G-code.
+    for (const key of Object.keys(entries)) {
+      if (key.startsWith('Metadata/') && key.endsWith('.png')) {
+        const { width, height } = readPngDimensions(entries[key])
+        entries[key] = new Uint8Array(buildSolidPng(width, height, [200, 200, 200]))
+      }
+    }
+
     return Buffer.from(zipSync(entries, { level: 6 }))
   }
 
@@ -123,7 +197,7 @@ export class BambuPrinterClient {
     }
   }
 
-  private static sendPrintCommand(ip: string, accessCode: string, serialNumber: string, remoteFileName: string): Promise<void> {
+  private static sendPrintCommand(ip: string, accessCode: string, serialNumber: string, remoteFileName: string, md5: string): Promise<void> {
     console.log(`[Bambu] MQTT: connecting to mqtts://${ip}:8883 ...`)
     return new Promise((resolve, reject) => {
       const client: MqttClient = mqtt.connect(`mqtts://${ip}:8883`, {
@@ -170,7 +244,7 @@ export class BambuPrinterClient {
             subtask_name: '',
             file: remoteFileName,
             url: `file:///sdcard/${remoteFileName}`,
-            md5: '',
+            md5,
             timelapse: false,
             bed_leveling: true,
             flow_cali: false,

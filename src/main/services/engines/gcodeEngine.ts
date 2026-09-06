@@ -71,7 +71,11 @@ export class GcodeEngine {
     gcode.push(`; Model height: ${modelHeight.toFixed(2)}mm, Layers: ${numLayers}`)
     gcode.push('')
 
-    // ponytail: basic rectangular perimeter per layer. Upgrade to voxel slicing + Arachne perimeters when Phase 1 ready.
+    // ponytail: basic rectangular perimeter per layer, no infill. Upgrade to voxel slicing + Arachne perimeters when Phase 1 ready.
+    const FILAMENT_DIAMETER = 1.75 // ponytail: assumes standard 1.75mm filament; add a profile field if alt diameters are needed
+    const filamentArea = Math.PI * (FILAMENT_DIAMETER / 2) ** 2
+    const lineWidth = opts.printer.nozzleSize
+
     for (let layer = 0; layer < Math.min(numLayers, 100); layer++) {
       const zHeight = bounds.min[2] + layer * settings.layerHeight
       gcode.push(`; Layer ${layer} / ${numLayers}`)
@@ -80,26 +84,32 @@ export class GcodeEngine {
       gcode.push(`M106 S${Math.round((fanSpeed / 100) * 255)}`)
 
       const insetDistance = opts.printer.nozzleSize
+      const corners: Array<[number, number]> = [
+        [bounds.min[0] + insetDistance, bounds.min[1] + insetDistance],
+        [bounds.max[0] - insetDistance, bounds.min[1] + insetDistance],
+        [bounds.max[0] - insetDistance, bounds.max[1] - insetDistance],
+        [bounds.min[0] + insetDistance, bounds.max[1] - insetDistance],
+        [bounds.min[0] + insetDistance, bounds.min[1] + insetDistance],
+      ]
+
       gcode.push(`G0 Z${zHeight.toFixed(3)} F600`)
-      gcode.push(
-        `G0 X${(bounds.min[0] + insetDistance).toFixed(2)} Y${(bounds.min[1] + insetDistance).toFixed(2)} F3000`
-      )
-      gcode.push(
-        `G0 X${(bounds.max[0] - insetDistance).toFixed(2)} Y${(bounds.min[1] + insetDistance).toFixed(2)} F${feedRate}`
-      )
-      gcode.push(
-        `G0 X${(bounds.max[0] - insetDistance).toFixed(2)} Y${(bounds.max[1] - insetDistance).toFixed(2)} F${feedRate}`
-      )
-      gcode.push(
-        `G0 X${(bounds.min[0] + insetDistance).toFixed(2)} Y${(bounds.max[1] - insetDistance).toFixed(2)} F${feedRate}`
-      )
-      gcode.push(
-        `G0 X${(bounds.min[0] + insetDistance).toFixed(2)} Y${(bounds.min[1] + insetDistance).toFixed(2)} F${feedRate}`
-      )
+      gcode.push(`G0 X${corners[0][0].toFixed(2)} Y${corners[0][1].toFixed(2)} F3000`)
+      gcode.push('G92 E0')
+
+      let e = 0
+      let [prevX, prevY] = corners[0]
+      for (let i = 1; i < corners.length; i++) {
+        const [x, y] = corners[i]
+        const dist = Math.hypot(x - prevX, y - prevY)
+        e += (dist * settings.layerHeight * lineWidth) / filamentArea
+        gcode.push(`G1 X${x.toFixed(2)} Y${y.toFixed(2)} E${e.toFixed(4)} F${feedRate}`)
+        prevX = x
+        prevY = y
+      }
 
       if (layer < numLayers - 1) {
         gcode.push(
-          `G0 E-${opts.filament.retractDistance} F${opts.filament.retractSpeed * 60}`
+          `G1 E${(e - opts.filament.retractDistance).toFixed(4)} F${opts.filament.retractSpeed * 60}`
         )
       }
 

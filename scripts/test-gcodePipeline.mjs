@@ -78,6 +78,14 @@ try {
   assert.match(gcode, /Bambu Lab A1 Mini/, 'header should name the selected printer')
   assert.match(gcode, /PLA \(Generic\)/, 'header should name the selected filament')
 
+  // Regression: perimeter moves must actually extrude (G1 + E), not just travel (G0).
+  // A prior bug drew every perimeter with G0 and no E, so the printer moved but never extruded.
+  const g1Lines = gcode.split('\n').filter((l) => l.startsWith('G1 X'))
+  assert.ok(g1Lines.length > 0, 'perimeters should use G1 (extruding) moves, not just G0 travel')
+  assert.ok(g1Lines.every((l) => /E-?\d/.test(l)), 'every perimeter G1 move must carry an E value')
+  const eValues = g1Lines.map((l) => parseFloat(l.match(/E(-?[\d.]+)/)[1]))
+  assert.ok(eValues.some((e) => e > 0), 'extrusion (E) must actually increase above zero somewhere')
+
   const time = GcodeEngine.estimatePrintTime(geometry, filament, settings)
   const weight = GcodeEngine.estimateFilamentWeight(geometry, filament, settings)
   assert.ok(time > 0, 'estimated print time should be positive')

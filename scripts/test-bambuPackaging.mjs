@@ -42,13 +42,23 @@ assert.equal(
   'md5 checksum entry should match the gcode content'
 )
 
-// Everything else must survive untouched from the template
-const untouchedEntries = Object.keys(entries).filter(
-  (k) => k !== 'Metadata/plate_1.gcode' && k !== 'Metadata/plate_1.gcode.md5'
+// Non-gcode, non-thumbnail entries must survive untouched from the template.
+// Thumbnails (Metadata/*.png) are deliberately replaced -- they'd otherwise show
+// whatever object the template was originally captured from, which is misleading.
+const swappedEntries = Object.keys(entries).filter(
+  (k) => k === 'Metadata/plate_1.gcode' || k === 'Metadata/plate_1.gcode.md5' || (k.startsWith('Metadata/') && k.endsWith('.png'))
 )
+const untouchedEntries = Object.keys(entries).filter((k) => !swappedEntries.includes(k))
 assert.ok(untouchedEntries.includes('3D/3dmodel.model'), 'template 3D model entry should be preserved')
 assert.ok(untouchedEntries.includes('_rels/.rels'), 'template rels entry should be preserved')
 assert.ok(untouchedEntries.includes('[Content_Types].xml'), 'template content-types entry should be preserved')
-assert.ok(untouchedEntries.length >= 10, 'template metadata (thumbnails, settings, etc.) should be preserved')
+assert.ok(untouchedEntries.length >= 6, 'non-thumbnail template metadata (settings, etc.) should be preserved')
 
-console.log(`PASS: buildProjectFile produces a valid .gcode.3mf (${untouchedEntries.length} template entries preserved, gcode + md5 swapped correctly)`)
+const thumbnailKeys = Object.keys(entries).filter((k) => k.startsWith('Metadata/') && k.endsWith('.png'))
+assert.ok(thumbnailKeys.length > 0, 'template should have at least one thumbnail to verify replacement on')
+for (const key of thumbnailKeys) {
+  const png = Buffer.from(entries[key])
+  assert.deepEqual(png.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), `${key} should still be a valid PNG`)
+}
+
+console.log(`PASS: buildProjectFile produces a valid .gcode.3mf (${untouchedEntries.length} template entries preserved, gcode + md5 swapped, ${thumbnailKeys.length} stale thumbnails replaced with valid placeholders)`)
