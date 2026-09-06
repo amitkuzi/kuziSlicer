@@ -254,13 +254,13 @@ export const GcodeViewer: React.FC<{ gcode?: string }> = ({ gcode = '' }) => {
           accessCode: bambuAccessCode.trim(),
           serialNumber: bambuSerialNumber.trim(),
           gcode: code,
-          fileName: 'kuziSlicer_print.gcode',
+          fileName: `kuziSlicer_print_${Date.now()}.gcode`,
         })) as { success: boolean; message: string }
       } else if (isElegooPrinter(printer)) {
         result = (await (window as any).electron.invoke('printer:elegoo-print', {
           ip: printer!.ipAddress,
           gcode: code,
-          fileName: 'kuziSlicer_print.gcode',
+          fileName: `kuziSlicer_print_${Date.now()}.gcode`,
         })) as { success: boolean; message: string }
       } else {
         result = (await (window as any).electron.invoke('gcode:send', {
