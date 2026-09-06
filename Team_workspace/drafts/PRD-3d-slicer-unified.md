@@ -1,5 +1,10 @@
 # PRD: Unified Next-Gen 3D Slicer (kuziSlicer)
 
+> **⚠️ SUPERSEDED (2026-09-06)** by [PRD-plugin-platform-v2.md](PRD-plugin-platform-v2.md).
+> The slicing-engine feature synthesis below (§2–§13) is still valid and is
+> referenced from the new PRD's §4 — only the product framing changed (this
+> app is now a plugin platform first, a slicer second). Kept here for history.
+
 Status: Draft (internal, English) — for Validator translation to `inbox/`
 Author: Researcher agent, kuziSlicer project
 Date: 2026-09-02
