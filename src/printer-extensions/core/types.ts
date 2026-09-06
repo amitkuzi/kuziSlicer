@@ -1,6 +1,7 @@
 import type { PrinterProfile } from '../../main/services/gcodeGenerator'
 
 export const RAPID_PRINTER_EXTENSION = 'rapid printer extension' as const
+export const RAPID_PRINTER_EXTENSION_INTERFACE_VERSION = '1.0.0' as const
 export interface PrinterConnection {
   readonly ip: string
   readonly accessCode: string

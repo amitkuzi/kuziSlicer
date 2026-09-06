@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { PrinterProfile, FilamentProfile } from '../../types/ipc'
+import type { ExperienceMode } from './MainWindow'
 
 export interface PrintSettingsState {
   modelName: string
@@ -66,13 +67,17 @@ const FormField: React.FC<FormFieldProps> = ({ label, children }) => (
 )
 
 export interface PrintSettingsProps {
+  mode: ExperienceMode
   modelPath?: string | null
+  onRequestModel?: () => void
   onSettingsChange?: (settings: PrintSettingsState) => void
   onGenerateGcode?: (gcode: string) => void
 }
 
 export const PrintSettings: React.FC<PrintSettingsProps> = ({
+  mode,
   modelPath,
+  onRequestModel,
   onSettingsChange,
   onGenerateGcode,
 }) => {
@@ -273,7 +278,15 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
     <div className="w-full h-full flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-fg2/10">
-        <h2 className="text-lg font-bold text-fg">Print Settings</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-fg">Print Settings</h2>
+          <span className="rounded-full bg-ember/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-ember">
+            {mode}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-fg2">
+          {mode === 'simple' ? 'Essential controls for a reliable first slice.' : 'Full control over profiles, temperatures and speed.'}
+        </p>
       </div>
 
       {/* Settings Sections */}
@@ -285,16 +298,25 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
           onToggle={() => toggleSection('model')}
         >
           <FormField label="Select Model">
-            <input
-              type="text"
-              value={settings.modelName}
-              onChange={(e) => handleSettingChange('modelName', e.target.value)}
-              placeholder="Loaded model name..."
-              className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember"
-            />
+            {mode === 'advanced' ? (
+              <input
+                type="text"
+                value={settings.modelName}
+                onChange={(e) => handleSettingChange('modelName', e.target.value)}
+                placeholder="Loaded model name..."
+                className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember"
+              />
+            ) : (
+              <p className="truncate rounded bg-raised px-3 py-2 text-sm text-fg">
+                {settings.modelName || 'No model loaded'}
+              </p>
+            )}
           </FormField>
-          <button className="w-full px-3 py-2 text-sm bg-ember hover:bg-ember/90 text-onEmber rounded font-medium transition-colors">
-            Load New Model
+          <button
+            onClick={onRequestModel}
+            className="w-full px-3 py-2 text-sm bg-ember hover:bg-ember/90 text-onEmber rounded font-medium transition-colors"
+          >
+            {modelPath ? 'Change Model' : 'Load Model'}
           </button>
         </CollapsibleSection>
 
@@ -318,7 +340,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               ))}
             </select>
           </FormField>
-          <FormField label="Nozzle Size">
+          {mode === 'advanced' && <FormField label="Nozzle Size">
             <select
               value={settings.nozzleSize}
               onChange={(e) => handleSettingChange('nozzleSize', parseFloat(e.target.value))}
@@ -330,7 +352,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
                 </option>
               ))}
             </select>
-          </FormField>
+          </FormField>}
           <FormField label={`Filament (${filaments.length} available)`}>
             <select
               value={settings.filament}
@@ -345,7 +367,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               ))}
             </select>
           </FormField>
-          <FormField label="Import Profiles (URL or GitHub link)">
+          {mode === 'advanced' && <FormField label="Import Profiles (URL or GitHub link)">
             <div className="flex gap-1">
               <input
                 type="text"
@@ -363,7 +385,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               </button>
             </div>
             {importMessage && <p className="text-xs text-fg2 mt-1">{importMessage}</p>}
-          </FormField>
+          </FormField>}
         </CollapsibleSection>
 
         {/* Quality Settings */}
@@ -421,8 +443,8 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
           </div>
         </CollapsibleSection>
 
-        {/* Temperatures */}
-        <CollapsibleSection
+        {/* Advanced controls */}
+        {mode === 'advanced' && <CollapsibleSection
           title="Temperature"
           isOpen={expandedSections.temperature}
           onToggle={() => toggleSection('temperature')}
@@ -447,10 +469,10 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               className="px-3 py-2 text-sm border border-fg2/20 rounded bg-raised text-fg focus:outline-none focus:border-ember"
             />
           </FormField>
-        </CollapsibleSection>
+        </CollapsibleSection>}
 
         {/* Speed */}
-        <CollapsibleSection
+        {mode === 'advanced' && <CollapsibleSection
           title="Speed"
           isOpen={expandedSections.speed}
           onToggle={() => toggleSection('speed')}
@@ -487,7 +509,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
               <span>200 mm/s</span>
             </div>
           </FormField>
-        </CollapsibleSection>
+        </CollapsibleSection>}
       </div>
 
       {/* Action Buttons */}

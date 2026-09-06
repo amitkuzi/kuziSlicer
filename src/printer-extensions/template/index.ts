@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { RAPID_PRINTER_EXTENSION, type RapidPrinterExtension } from '../core/types'
 
 /** Copy this directory, implement the two hooks, then run the extension bench. */

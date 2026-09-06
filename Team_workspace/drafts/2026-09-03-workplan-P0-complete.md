@@ -7,6 +7,38 @@
 
 ---
 
+## עדכון ביצוע 2026-09-06 — מסלול שימוש Simple / Advanced
+
+ניתוח הדלתא בין ה-PRD, ה-HLD והקוד העלה שהבסיס הארכיטקטוני והרחבות המדפסות התקדמו משמעותית מעבר לסטטוסים הישנים במסמך, אך דרישת ה-PRD ל-`favorites-first` עם נתיב ברור להגדרות מלאות עדיין לא מומשה כמוצר. ה-slice הבא מקדים שימושיות יומיומית לפני הרחבת מנוע החיתוך:
+
+| מזהה | משימה | תלויה ב | מצב |
+|---|---|---|---|
+| UX-1 | מודל מצב `simple \| advanced` עם שמירה מקומית | — | ✅ בוצע |
+| UX-2 | מתג מצב גלובלי, נגיש וברור | UX-1 | ✅ בוצע |
+| UX-3 | Simple מציג רק Model, Printer/Filament ו-Quality | UX-1 | ✅ בוצע |
+| UX-4 | Advanced חושף nozzle, import, temperature ו-speed | UX-1 | ✅ בוצע |
+| UX-5 | חיבור פעולת Load/Change Model ל-3D Viewer | UX-2 | ✅ בוצע |
+| UX-6 | Build + בדיקת UI ידנית בשני המצבים | UX-2..UX-5 | ✅ עבר |
+| UX-7 | קבלה: STL → פרופילים → G-code → preview/send | UX-6 | ⚠ pipeline אוטומטי עבר; print אמיתי לא נשלח |
+
+```mermaid
+flowchart LR
+  D[PRD favorites-first] --> M[UX-1 mode model]
+  H[HLD Phase 2/4 UI] --> M
+  M --> T[UX-2 mode toggle]
+  M --> S[UX-3 Simple essentials]
+  M --> A[UX-4 Advanced controls]
+  T --> L[UX-5 model navigation]
+  S --> V[UX-6 build and UI verification]
+  A --> V
+  L --> V
+  V --> E[UX-7 end-to-end acceptance]
+```
+
+החלטת scope: "Simple" הוא מסלול ברירת-המחדל לחיתוך ראשון עם מעט החלטות; "Advanced" אינו מנוע אחר אלא חשיפה של מלוא בקרות הפרופיל והחיתוך. שני המצבים משתמשים באותו state ובאותו pipeline כדי למנוע פיצול התנהגות. תוכנית הבדיקה נשמרת ב-`src/renderer/components/MainWindow.testplan.md`.
+
+---
+
 ## תקציר
 
 תוכנית עבודה מפורטת ל-P0 של kuziSlicer עם **5 שלבים קצרים** (Phases 0–5), **27 משימות עיקריות**, ו**מפת תלויות מלאה**. סדר הביצוע מומלץ: **Phase 0 → 2 → 3 → 4 → (5) → Phase 1 במקביל** (Phase 1 חסום בהחלטת רישוי §0 בPRD).
@@ -322,19 +354,19 @@
 
 ---
 
-## Phase 1 — מנוע החיתוך (5 משימות) ❌ **חסום ב-§0**
+## Phase 1 — מנוע החיתוך (5 משימות) 🟡 **מאושר ליישום GPLv3**
 
-**תלויות קודמות:** Phase 0 + **החלטת רישוי ב-§0**
+**תלויות קודמות:** חוזי Phase 0 + audit מקור/רישיון פר-תלות
 
 #### 1.1 – Arachne Perimeter Engine
 - **מטרה:** Plugin בטלנט Arachne (variable width lines):
   - Parse STL → outline curves
   - Generate concentric perimeters בעובי דינמי
   - Gcode output
-  - **תלוי ב-§0:** אם GPL → שימוש חוזר בקוד; אם Apache → יישום עצמאי
-- **תלויות:** Phase 0, §0 decision  
+  - **החלטה:** שימוש חוזר מותר תחת GPL-3.0-or-later, בכפוף ל-audit מקור והודעות צד-שלישי
+- **תלויות:** Phase 0, audit רישיון  
 - **סוג בדיקה:** Unit (boundary geometry), Snapshot match (fixture STL vs. known gcode)  
-- **סטטוס:** ⏳ חסום ב-§0  
+- **סטטוס:** 🟡 מוכן להתחלה לאחר תבנית engine ו-audit מקור  
 - **קובץ:** `kuziSlicer.PluginHost/plugins/plugin-arcane/Engine.cs` (or TS)
 
 #### 1.2 – Infill Patterns + Sandwich Mode
@@ -344,7 +376,7 @@
   - Per-object override (§2.1)
 - **תלויות:** Phase 0, 1.1, §0  
 - **סוג בדיקה:** Unit (density coverage), Integration (per-object override)  
-- **סטטוס:** ⏳ חסום ב-§0  
+- **סטטוס:** 🟡 מוכן לתכנון/בדיקות  
 - **קובץ:** `plugin-arcane/Infill.cs`
 
 #### 1.3 – Support Generation (Organic + Grid)
@@ -355,7 +387,7 @@
   - Manual override (via 4.2 gizmo)
 - **תלויות:** Phase 0, 1.1, 4.2, §0  
 - **סוג בדיקה:** Unit (overhang detection), Integration (user override)  
-- **סטטוס:** ⏳ חסום ב-§0  
+- **סטטוס:** 🟡 מוכן לתכנון; תלוי ב-1.1 ו-4.2  
 - **קובץ:** `plugin-arcane/Support.cs`
 
 #### 1.4 – Wipe Tower (Multi-Material)
@@ -366,7 +398,7 @@
   - Gcode generation (retract, move, purge, retract back)
 - **תלויות:** Phase 0, 1.1, §0  
 - **סוג בדיקה:** Unit (volume calc)  
-- **סטטוס:** ⏳ חסום ב-§0  
+- **סטטוס:** 🟡 מוכן לתכנון; תלוי ב-1.1  
 - **קובץ:** `plugin-arcane/WipeTower.cs`
 
 #### 1.5 – Abstract Filament Source Model
@@ -376,7 +408,7 @@
   - Manager resolves at slice time
 - **תלויות:** Phase 0, §0  
 - **סוג בדיקה:** Unit (mapping)  
-- **סטטוס:** ⏳ חסום ב-§0  
+- **סטטוס:** 🟡 מוכן לתכנון  
 - **קובץ:** `src/types/filament.ts`, `src/main/services/filamentManager.ts`
 
 ---
@@ -385,8 +417,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ BLOCKING DECISION                                           │
-│ §0: Licensing (GPL vs. Apache) — Phase 1 waits             │
+│ RESOLVED DECISION                                           │
+│ §0: GPL-3.0-or-later engine path selected                  │
 └──────┬──────────────────────────────────────────────────────┘
        │
        │ (other phases proceed independently)
@@ -461,7 +493,7 @@
 | 3️⃣ | Phase 3 | 0 | 3–4 שבועות | Connectivity — mid complexity |
 | 4️⃣ | Phase 4 | 0, 3 | 2–3 שבועות | UI/3D — parallel possible; 4.2 waits for decision on 1.3 |
 | 5️⃣ | Phase 5 | 0, 1 (cond) | 1 שבוע | Acceptance — final only after others done |
-| 🔄 | Phase 1 | 0, §0 | **⏸ BLOCKED** | **תלוי בהחלטה §0.** Run parallel to 2–5 ברגע שההחלטה תתקבל |
+| 🔄 | Phase 1 | 0, audit | **🟡 READY** | נתיב GPLv3 אושר; רץ במקביל לאחר חוזי Phase 0 |
 
 **Critical Path:** Phase 0 (5–6 שבועות) → Phase 2 (2–3) → Phase 3 (3–4) → Phase 5 (1) = **~12–14 שבועות** ל-P0 **ללא** Phase 1.  
 **Total with Phase 1 (if GPL decision):** +6–8 שבועות (parallel).
@@ -493,7 +525,7 @@
 
 | סיכון | השפעה | סבירות | פעולה |
 |------|--------|--------|---------|
-| §0 לא מתקבל לפי לוח הזמנים | P0 מתעכב 1–2 משבועות | בינונית | Track closely, escalate week 2 |
+| שימוש בקוד GPL/צד-שלישי ללא audit מלא | עיכוב או הפרת רישוי ב-release | בינונית | audit מקור, NOTICE ואריזה לפני merge/release |
 | PluginHost + Electron ipc תחזוקה גבוהה | Maintenance burden grows | בינונית | Integration tests + CI sanity checks |
 | Moonraker mock server חסר | 3.2 בדיקה מתעכבת | נמוכה | Prepare docker-compose fixture |
 | PBR rending FPS drop | 4.1 צריך optimization | נמוכה | Benchmark early, optimize if needed |
@@ -503,7 +535,7 @@
 
 ## פערי מידע
 
-- **Exact PluginHost hosting/CI:** עדיין לא בחרנו GitHub owner/org ו-CI service (GitHub Actions vs. Azure).
+- **PluginHost/store hosting:** נבחר GitHub Actions תחת `amitkuzi`; הקמת `kuziSlicer.store` ו-GitHub Pages בעבודה.
 - **Moonraker test fixture:** צריך docker-compose להרצה מקומית בבדיקות integration.
 - **Arachne licensing details:** PR של OpenSCAD לא טרם סגור; דוקומנטציה של license לא ברורה לחלוטין.
 
@@ -511,18 +543,9 @@
 
 ## החלטות שנדרשות ממך
 
-### 1. **§0 — רישוי מנוע החיתוך**
-- **אפשרות A:** GPL (שימוש חוזר בקוד Arachne + PrusaSlicer)
-  - **עלות:** kuziSlicer.PluginHost binary חייב להיות Apache-2.0, בלי linking ל-GPL plugin; נתונים גיוונים בקוד open-source.
-  - **לוח:** P0 + Phase 1 = 12–14 שבועות (parallel Phase 1 from week 6).
-  - **סיכון:** Arachne protocol might break with firmware updates.
-- **אפשרות B:** Apache-2.0 (יישום עצמאי)
-  - **עלות:** Phase 1 =+2–4 שבועות יישום חדש של מתמטיקה.
-  - **לוח:** P0 + Phase 1 = 14–18 שבועות.
-  - **יתרון:** בלי תלויות GPL, שליטה מלאה בקוד.
-
-**עם מי:** בעל המוצר.  
-**מתי:** לפני שבוע 1 של Phase 0, כדי שלא לחסום את Phase 1 flow.
+### 1. **§0 — רישוי מנוע החיתוך: ✅ הוחלט**
+- נבחר שימוש חוזר בקוד Arachne/PS תחת GPL-3.0-or-later.
+- כל פלאגין נגזר יקבל LICENSE/NOTICE ובדיקת provenance; האריזה וההפצה יעברו audit משפטי.
 
 ### 2. **GitHub + CI לפלאגין-הוסט**
 - **Create repo?** GitHub private/public? Under what owner?
@@ -544,7 +567,7 @@
 
 ## הצעד הבא
 
-1. **עדכון §0 decision** לפי choice A/B למעלה — משפיע על Phase 1 timeline (תשובה דחופה, דצור לפני שבוע 1).
+1. **✅ §0 נסגר:** נתיב GPL-3.0-or-later נבחר; לפתוח audit מקור עבור 1.1.
 
 2. **Setup PluginHost repo + CI** — יוצר .gitignore, build pipeline, initial nuget restore (שבוע 1).
 

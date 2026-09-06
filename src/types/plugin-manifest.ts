@@ -46,6 +46,9 @@ export interface PluginManifest {
    */
   type: 'engine' | 'importer' | 'exporter' | 'tool' | 'rapid printer extension'
 
+  /** Version of the type-specific request/result contract. */
+  interfaceVersion?: string
+
   /**
    * Requested sandbox permissions (optional).
    * Used by PluginHost to set OS limits / file access rules.
@@ -62,6 +65,13 @@ export interface PluginManifest {
    * For script plugins: "main.js" or "main.py" (future; not in P0).
    */
   entrypoint: string
+
+  /**
+   * PluginHost compatibility alias for out-of-process executables.
+   * New manifests should set it to the same value as entrypoint until the
+   * C# host completes its manifest migration.
+   */
+  executablePath?: string
 
   /**
    * Minimum kuziSlicer version required (semver, optional).
@@ -97,6 +107,8 @@ export function validateManifest(manifest: unknown): manifest is PluginManifest 
 
   // Optional fields
   if (m.permissions && !Array.isArray(m.permissions)) return false
+  if (m.interfaceVersion && (typeof m.interfaceVersion !== 'string' || !isSemVer(m.interfaceVersion))) return false
+  if (m.executablePath && typeof m.executablePath !== 'string') return false
   if (m.minVersion && (typeof m.minVersion !== 'string' || !isSemVer(m.minVersion))) return false
   if (m.maxVersion && (typeof m.maxVersion !== 'string' || !isSemVer(m.maxVersion))) return false
 

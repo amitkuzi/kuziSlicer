@@ -28,6 +28,7 @@
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "test:printerextensions": "node scripts/test-rapidPrinterExtensions.mjs && node scripts/test-rapidPrinterPrepare.mjs && node scripts/test-rapidPrinterRegistry.mjs && node scripts/test-rapidPrinterTransport.mjs",
+    "test:plugintemplates": "node scripts/test-pluginTemplates.mjs && node src/plugins/PluginHost/templates/tests/smoke.mjs",
     "printer:bench": "node scripts/printer-extension-bench.mjs",
     "printer:new": "node scripts/create-printer-extension.mjs"
   },
