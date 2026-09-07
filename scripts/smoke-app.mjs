@@ -7,7 +7,10 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const PORT = 9223
+// A fixed port let this run attach to a *stale* Electron left over from an earlier run
+// and report its state as ours. Unique port + throwaway profile per run instead.
+const PORT = 9223 + (process.pid % 300)
+const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'kuzi-smoke-profile-'))
 // Absolute + platform-native, or cmd.exe rejects the forward slashes under shell:true.
 const electron = path.resolve(
   process.cwd(),
@@ -105,7 +108,7 @@ function connect(url) {
 const modelPath = path.join(os.tmpdir(), `kuzi-smoke-${Date.now()}.stl`)
 writeBox(modelPath)
 
-const child = spawn(electron, ['.', `--remote-debugging-port=${PORT}`], {
+const child = spawn(electron, ['.', `--remote-debugging-port=${PORT}`, `--user-data-dir=${USER_DATA}`], {
   stdio: ['ignore', 'pipe', 'pipe'],
   shell: process.platform === 'win32',
 })
@@ -135,12 +138,16 @@ try {
   check(painted.html > 500, 'renderer painted', `${painted.html} bytes of DOM`)
 
   // 2. Skip the first-run config wizard if it is showing.
-  await cdp.evaluate(`
-    const skip = [...document.querySelectorAll('button')].find(b => /skip/i.test(b.textContent))
-    if (skip) skip.click()
-    return true
-  `)
-  await sleep(1200)
+  // On a fresh profile the wizard can mount after the splash clears, so keep trying.
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const gone = await cdp.evaluate(`
+      const skip = [...document.querySelectorAll('button')].find(b => /skip/i.test(b.textContent))
+      if (skip) { skip.click(); return false }
+      return true
+    `)
+    if (gone && attempt > 0) break
+    await sleep(500)
+  }
 
   // 3. Switch to Advanced mode so every control is on screen. The first-run wizard can
   // still be clearing, so retry until the mode toggle is actually reachable.
@@ -230,6 +237,150 @@ try {
   `)
   check(preview.sized > 0, 'a live WebGL canvas is on screen', `${preview.sized}/${preview.canvases} sized`)
 
+  // 8b. A slice reports progress to the UI instead of silently freezing it.
+  const banner = await cdp.evaluate(`
+    const printers = await window.electron.invoke('gcode:printers')
+    const filaments = await window.electron.invoke('gcode:filaments')
+    const seen = []
+    const job = window.electron.invoke('gcode:generate', ${JSON.stringify(modelPath)},
+      printers[0].name, filaments[0].name,
+      { layerHeight: 0.1, infillDensity: 40, infillPattern: 'gyroid', shellThickness: 1.2, supportEnabled: false, fanSpeed: 100 },
+      { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] })
+    for (let i = 0; i < 60; i++) {
+      const el = document.querySelector('[role=status]')
+      if (el) seen.push(el.innerText.replace(/\\s+/g, ' ').trim())
+      await new Promise(r => setTimeout(r, 100))
+      if (seen.length && !document.querySelector('[role=status]')) break
+    }
+    await job
+    await new Promise(r => setTimeout(r, 500))
+    return { seen, cleared: !document.querySelector('[role=status]') }
+  `)
+  check(banner.seen.length > 0, 'the busy indicator appears while slicing', banner.seen[0] || 'never appeared')
+  check(banner.seen.some(t => /%/.test(t)), 'it reports real percentage progress', banner.seen.filter(t => /%/.test(t)).slice(-1)[0] || 'no percentage')
+  check(banner.cleared, 'the busy indicator clears when the slice finishes')
+
+  // 9. The sidebar width handle actually resizes the panel and remembers it.
+  const resize = await cdp.evaluate(`
+    const aside = document.querySelector('aside')
+    const handle = document.querySelector('[role=separator][aria-label="Resize settings panel"]')
+    if (!aside || !handle) return { ok: false, reason: 'resize handle not found' }
+    const before = aside.getBoundingClientRect().width
+    handle.focus()
+    for (let i = 0; i < 3; i++) {
+      handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    }
+    await new Promise(r => setTimeout(r, 300))
+    return {
+      ok: true,
+      before,
+      after: document.querySelector('aside').getBoundingClientRect().width,
+      stored: localStorage.getItem('panelWidth'),
+    }
+  `)
+  check(resize.ok && resize.after > resize.before, 'sidebar resize handle widens the panel', `${resize.before} → ${resize.after}`)
+
+  // A pointer drag must end when the button is released -- a stuck listener would keep
+  // resizing on plain mouse moves afterwards, which is exactly what pointer capture prevents.
+  const drag = await cdp.evaluate(`
+    const handle = document.querySelector('[role=separator][aria-label="Resize settings panel"]')
+    const aside = document.querySelector('aside')
+    const send = (type, x) => handle.dispatchEvent(new PointerEvent(type, {
+      pointerId: 1, clientX: x, clientY: 300, bubbles: true, cancelable: true, isPrimary: true,
+    }))
+    send('pointerdown', handle.getBoundingClientRect().x)
+    send('pointermove', 420)
+    await new Promise(r => setTimeout(r, 200))
+    const dragged = aside.getBoundingClientRect().width
+    send('pointerup', 420)
+    await new Promise(r => setTimeout(r, 100))
+    send('pointermove', 250) // no button held: must be ignored
+    await new Promise(r => setTimeout(r, 200))
+    return { dragged, afterRelease: aside.getBoundingClientRect().width }
+  `)
+  check(Math.round(drag.dragged) === 420, 'pointer drag resizes the panel', `width ${drag.dragged}`)
+  check(drag.afterRelease === drag.dragged, 'the drag stops on pointerup', `width drifted to ${drag.afterRelease}`)
+
+  // 10. Clicking a configured printer opens its own tab with the printer's web UI.
+  const added = await cdp.evaluate(`
+    const models = await window.electron.invoke('gcode:printers')
+    await window.electron.invoke('printer:configured:add', {
+      name: 'Smoke Printer', model: models[0].id, ipAddress: '127.0.0.1', port: '8099',
+    })
+    const list = await window.electron.invoke('printer:configured:list')
+    return { count: list.length, name: list[0] && list[0].name, width: localStorage.getItem('panelWidth') }
+  `)
+  check(added.count === 1 && added.name === 'Smoke Printer', 'test printer persisted over IPC', `${added.count} configured`)
+  await cdp.send('Page.reload')
+  await sleep(4000)
+
+  // Survives a reload: this is what "persisted" actually has to mean.
+  const restored = await cdp.evaluate(`
+    return { width: document.querySelector('aside').getBoundingClientRect().width }
+  `)
+  check(restored.width === Number(added.width), 'panel width restored after reload', `${restored.width} vs stored ${added.width}`)
+
+  const printerTab = await cdp.evaluate(`
+    const tab = [...document.querySelectorAll('button')].find(b => /Printer Management/.test(b.textContent))
+    if (!tab) return { ok: false, reason: 'printer management tab missing' }
+    tab.click()
+    await new Promise(r => setTimeout(r, 600))
+    // The clickable card itself, not an ancestor container that merely contains its text.
+    const card = [...document.querySelectorAll('div.cursor-pointer')].find(d => /Smoke Printer/.test(d.textContent))
+    if (!card) return { ok: false, reason: 'printer card missing' }
+    card.click()
+    await new Promise(r => setTimeout(r, 600))
+    const frame = document.querySelector('iframe')
+    return {
+      ok: true,
+      src: frame ? frame.getAttribute('src') : null,
+      visible: frame ? !frame.closest('.hidden') : false,
+      closable: !!document.querySelector('[aria-label="Close Smoke Printer"]'),
+    }
+  `)
+  check(printerTab.ok, 'printer card reachable', printerTab.reason || '')
+  check(printerTab.src === 'http://127.0.0.1:8099/', 'printer tab hosts the printer web UI', `src ${printerTab.src}`)
+  check(printerTab.visible, 'the printer tab is the visible one after clicking the card')
+  check(printerTab.closable, 'printer tab has a close button')
+
+  const closed = await cdp.evaluate(`
+    document.querySelector('[aria-label="Close Smoke Printer"]').click()
+    await new Promise(r => setTimeout(r, 400))
+    return {
+      frames: document.querySelectorAll('iframe').length,
+      tabStillThere: !!document.querySelector('[aria-label="Close Smoke Printer"]'),
+    }
+  `)
+  check(closed.frames === 0 && !closed.tabStillThere, 'closing the printer tab removes tab and frame', `${closed.frames} iframes, tab present: ${closed.tabStillThere}`)
+
+  // A renamed printer must not leave a tab labelled with the old name framing the old IP.
+  const renamed = await cdp.evaluate(`
+    const card = [...document.querySelectorAll('div.cursor-pointer')].find(d => /Smoke Printer/.test(d.textContent))
+    card.click()
+    await new Promise(r => setTimeout(r, 500))
+    // Rename it the way a user would: the Edit button on the card, then Update.
+    const mgmt = [...document.querySelectorAll('button')].find(b => /^Printer Management$/.test(b.textContent.trim()))
+    mgmt.click()
+    await new Promise(r => setTimeout(r, 400))
+    const edit = [...document.querySelectorAll('div.cursor-pointer')]
+      .find(d => /Smoke Printer/.test(d.textContent))
+      .querySelector('button')
+    edit.click()
+    await new Promise(r => setTimeout(r, 400))
+    const nameInput = document.querySelector('input[name=name]')
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    setter.call(nameInput, 'Renamed Printer')
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await new Promise(r => setTimeout(r, 200))
+    ;[...document.querySelectorAll('button')].find(b => /Update Printer/.test(b.textContent)).click()
+    await new Promise(r => setTimeout(r, 900))
+    return {
+      staleTab: !!document.querySelector('[aria-label="Close Smoke Printer"]'),
+      freshTab: !!document.querySelector('[aria-label="Close Renamed Printer"]'),
+    }
+  `)
+  check(!renamed.staleTab && renamed.freshTab, 'an open printer tab follows a rename', `stale: ${renamed.staleTab}, fresh: ${renamed.freshTab}`)
+
   const realErrors = cdp.consoleErrors.filter(
     (e) => !/DevTools|Autofill|Electron Security|source map/i.test(e)
   )
@@ -247,6 +398,7 @@ try {
     child.kill('SIGKILL')
   }
   fs.rmSync(modelPath, { force: true })
+  try { fs.rmSync(USER_DATA, { recursive: true, force: true }) } catch { /* electron still exiting */ }
 }
 
 console.log(failures === 0 ? '\nPASS: app smoke test' : `\nFAIL: ${failures} smoke check(s) failed`)

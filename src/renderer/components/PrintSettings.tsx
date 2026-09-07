@@ -250,6 +250,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
   }
 
   const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
 
   // Reflect the loaded model's path into the (otherwise free-text) model name field
   useEffect(() => {
@@ -260,24 +261,25 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
 
   const handleGenerateGcode = async () => {
     if (!modelPath) {
-      alert('Load a model via a full path first (Browse… or paste a path in the 3D Viewer) -- G-code generation needs a file on disk, not just a preview.')
+      setGenerateError('Load a model via a full path first (Browse… or paste a path in the 3D Viewer) — G-code generation needs a file on disk, not just a preview.')
       return
     }
     if (!/\.(stl|3mf)$/i.test(modelPath)) {
-      alert('G-code generation supports .stl and .3mf models.')
+      setGenerateError('G-code generation supports .stl and .3mf models.')
       return
     }
     const printer = printers.find((p) => p.id === settings.printer)
     const filament = filaments.find((f) => f.id === settings.filament)
     if (!printer) {
-      alert('Select a printer first.')
+      setGenerateError('Select a printer first.')
       return
     }
     if (!filament) {
-      alert('Select a filament first.')
+      setGenerateError('Select a filament first.')
       return
     }
 
+    setGenerateError(null)
     setGenerating(true)
     try {
       // gcode:generate writes the result to a temp file and returns its path
@@ -308,7 +310,7 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
       onGenerateGcode?.(read.content)
     } catch (e) {
       console.error('Failed to generate G-code:', e)
-      alert(`Error generating G-code: ${String(e)}`)
+      setGenerateError(e instanceof Error ? e.message : String(e))
     } finally {
       setGenerating(false)
     }
@@ -766,6 +768,11 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
         {!modelPath && (
           <p className="text-xs text-fg2">
             Load a model by full path (3D Viewer tab) to enable G-code generation.
+          </p>
+        )}
+        {generateError && (
+          <p role="alert" className="rounded border border-red-400 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {generateError}
           </p>
         )}
         <button

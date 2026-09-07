@@ -15,6 +15,8 @@ export interface GcodeEngineOptions {
   printer: PrinterProfile
   filament: FilamentProfile
   settings: PrintSettings
+  /** Called as layers are emitted, so a caller can report real progress. */
+  onProgress?: (done: number, total: number) => void
 }
 
 const FILAMENT_DIAMETER = 1.75 // ponytail: assumes standard 1.75mm filament; add a profile field if alt diameters are needed
@@ -147,6 +149,7 @@ export class GcodeEngine {
     }
 
     for (let index = 0; index < layers.length; index++) {
+      if (opts.onProgress && index % 8 === 0) opts.onProgress(index + 1, layers.length)
       const layer = layers[index]
       const layerSupports = supports[index] || []
       // A layer can be support-only: an arm that starts in mid-air has nothing of the
@@ -198,6 +201,8 @@ export class GcodeEngine {
 
       gcode.push('')
     }
+
+    opts.onProgress?.(layers.length, layers.length)
 
     // End
     gcode.push('; End of print')

@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import * as fs from 'fs'
 import * as net from 'net'
-import { GcodeGenerator, PrinterProfile, FilamentProfile, PrintSettings, ModelTransform } from './services/gcodeGenerator'
+import { GcodeGenerator, stopActiveSlice, PrinterProfile, FilamentProfile, PrintSettings, ModelTransform } from './services/gcodeGenerator'
 import PluginHostClient from './clients/pluginHostClient'
 import BambuPrinterClient from './clients/bambuPrinterClient'
 import elegooCentauriCarbon from '../plugins/extensions/plugins/elegoo-centauri-carbon/src/index'
@@ -94,7 +94,7 @@ function saveSettings(settings: Record<string, unknown>): void {
 // IPC Handlers — G-code
 // ============================================================
 
-ipcMain.handle('gcode:generate', async (_event, modelPath: string, printerName: string, filamentName: string, settings: PrintSettings, transform?: ModelTransform) => {
+ipcMain.handle('gcode:generate', async (event, modelPath: string, printerName: string, filamentName: string, settings: PrintSettings, transform?: ModelTransform) => {
   const printers = GcodeGenerator.getPrinterProfiles()
   const filaments = GcodeGenerator.getFilamentProfiles()
   const printer = printers.find((p) => p.name === printerName)
@@ -103,20 +103,14 @@ ipcMain.handle('gcode:generate', async (_event, modelPath: string, printerName: 
   if (!printer) throw new Error(`Printer "${printerName}" not found`)
   if (!filament) throw new Error(`Filament "${filamentName}" not found`)
 
-  const gcode = await GcodeGenerator.generate({
-    modelPath,
-    printerProfile: printer,
-    filamentProfile: filament,
-    settings,
-    transform,
-  })
-
-  const tempDir = path.join(app.getPath('temp'), 'kuziSlicer')
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
-
-  const gcodeFilePath = path.join(tempDir, `print_${Date.now()}.gcode`)
-  fs.writeFileSync(gcodeFilePath, gcode)
-  return gcodeFilePath
+  try {
+    return await GcodeGenerator.generateToFile(
+      { modelPath, printerProfile: printer, filamentProfile: filament, settings, transform },
+      (progress) => event.sender.send('job:progress', progress)
+    )
+  } finally {
+    event.sender.send('job:progress', { phase: 'idle' })
+  }
 })
 
 ipcMain.handle('gcode:infill-patterns', () =>
@@ -472,6 +466,7 @@ app.on('activate', () => {
 
 app.on('before-quit', async () => {
   console.log('[Main] Shutting down')
+  stopActiveSlice()
   if (pluginManager) {
     pluginManager.saveConfig()
   }

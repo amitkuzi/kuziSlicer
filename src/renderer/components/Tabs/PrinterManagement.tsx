@@ -23,7 +23,14 @@ const INITIAL_FORM: FormData = {
   port: '80',
 }
 
-export const PrinterManagement: React.FC = () => {
+interface PrinterManagementProps {
+  /** Opens the printer's own web interface in its own tab. */
+  onOpenPrinter?: (printer: ConfiguredPrinter) => void
+  /** Fires whenever the configured list is (re)loaded, so open printer tabs stay current. */
+  onPrintersChanged?: (printers: ConfiguredPrinter[]) => void
+}
+
+export const PrinterManagement: React.FC<PrinterManagementProps> = ({ onOpenPrinter, onPrintersChanged }) => {
   const [printers, setPrinters] = useState<ConfiguredPrinter[]>([])
   const [models, setModels] = useState<PrinterModels[]>([])
   const [loading, setLoading] = useState(true)
@@ -47,6 +54,7 @@ export const PrinterManagement: React.FC = () => {
       setLoading(true)
       const data = (await window.electron.invoke('printer:configured:list')) as ConfiguredPrinter[]
       setPrinters(data || [])
+      onPrintersChanged?.(data || [])
       setError(null)
     } catch (err) {
       setError('Failed to load printers')
@@ -243,7 +251,7 @@ export const PrinterManagement: React.FC = () => {
           {printers.map((printer) => (
             <div
               key={printer.id}
-              onClick={() => handleEditClick(printer)}
+              onClick={() => onOpenPrinter?.(printer)}
               className="bg-raised rounded-lg border border-fg2/10 p-4 hover:border-ember/50 hover:shadow-md transition-all cursor-pointer"
             >
               {/* Status Indicator */}
@@ -252,15 +260,26 @@ export const PrinterManagement: React.FC = () => {
                   <span className="text-2xl">{getStatusIcon(printer.status)}</span>
                   <span className="text-sm font-medium text-fg2">{getStatusLabel(printer.status)}</span>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleDeleteClick(printer.id)
-                  }}
-                  className="px-3 py-1 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
-                >
-                  Delete
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEditClick(printer)
+                    }}
+                    className="px-3 py-1 text-sm bg-fg2/10 text-fg rounded hover:bg-fg2/20 transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteClick(printer.id)
+                    }}
+                    className="px-3 py-1 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
 
               {/* Printer Name */}
@@ -294,7 +313,7 @@ export const PrinterManagement: React.FC = () => {
               </div>
 
               {/* Click Hint */}
-              <div className="mt-3 text-xs text-fg2/50">Click to edit</div>
+              <div className="mt-3 text-xs text-fg2/50">Click to open the printer's interface</div>
             </div>
           ))}
         </div>

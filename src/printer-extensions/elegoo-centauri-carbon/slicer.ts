@@ -11,6 +11,10 @@ export interface ElegooSliceOptions {
   filamentId?: string
 }
 
+// What the app can actually load and preview. ElegooSlicer's CLI reads more (it shares
+// Orca/Prusa ancestry), but widening here without widening the viewer just moves the failure.
+const SUPPORTED_MODEL_FORMATS = new Set(['.stl', '.3mf'])
+
 export class ElegooSlicerService {
   private static readonly INSTALL_DIRECTORY = 'C:\\Program Files\\ElegooSlicer'
   private static readonly FILAMENT_PRESETS: Readonly<Record<string, string>> = {
@@ -45,8 +49,9 @@ export class ElegooSlicerService {
       throw new Error('ElegooSlicer is required. Install it from ELEGOO before slicing for the Centauri Carbon.')
     }
     if (!fs.existsSync(options.modelPath)) throw new Error(`Model file not found: ${options.modelPath}`)
-    if (path.extname(options.modelPath).toLowerCase() !== '.stl') {
-      throw new Error('Centauri Carbon slicing currently supports STL files only.')
+    // ElegooSlicer's CLI reads the same mesh formats as its Orca/Prusa ancestry.
+    if (!SUPPORTED_MODEL_FORMATS.has(path.extname(options.modelPath).toLowerCase())) {
+      throw new Error(`Centauri Carbon slicing supports ${[...SUPPORTED_MODEL_FORMATS].join(', ')} files.`)
     }
     if (options.nozzleSize !== 0.4) {
       throw new Error('Only the verified Centauri Carbon 0.4 mm profile is currently enabled.')

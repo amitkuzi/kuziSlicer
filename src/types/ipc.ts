@@ -113,7 +113,14 @@ export type SendChannels = {
 }
 
 // Event channels (listener)
+export type SliceProgress =
+  | { phase: 'preparing' }
+  | { phase: 'slicing'; done: number; total: number }
+  | { phase: 'external' }
+  | { phase: 'idle' }
+
 export type EventChannels = {
+  'job:progress': (progress: SliceProgress) => void
   'printer:connected': (printer: Printer) => void
   'printer:disconnected': (printerId: string) => void
   'app:update': (info: { version: string }) => void

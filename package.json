@@ -13,7 +13,8 @@
     "dev:electron": "wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .",
     "build": "npm run build:main && npm run build:vite",
     "build:vite": "vite build",
-    "build:main": "npm run build:main:entry && npm run build:main:preload",
+    "build:main": "npm run build:main:entry && npm run build:main:preload && npm run build:main:worker",
+    "build:main:worker": "esbuild src/main/sliceWorker.ts --bundle --platform=node --target=node18 --external:electron --outfile=dist/sliceWorker.js",
     "build:main:entry": "esbuild src/main/main.ts --bundle --platform=node --target=node18 --external:electron --outfile=dist/main.js",
     "build:main:preload": "esbuild src/main/preload.ts --bundle --platform=node --target=node18 --external:electron --outfile=dist/preload.js",
     "prestart": "npm run build:main",
@@ -24,6 +25,8 @@
     "smoke": "node scripts/smoke-app.mjs",
     "test:gcodevalidation": "node scripts/test-gcodeValidation.mjs",
     "test:elegooslicer": "node scripts/test-elegooSlicer.mjs",
+    "test:elegoo3mf": "node scripts/test-elegoo3mf.mjs",
+    "test:sliceworker": "node scripts/test-sliceWorker.mjs",
     "test:elegooprotocol": "node scripts/test-elegooProtocol.mjs",
     "test:bambupackaging": "node scripts/test-bambuPackaging.mjs",
     "start": "cross-env NODE_ENV=production electron .",
@@ -73,7 +76,8 @@
       "dist/assets/**/*",
       "node_modules/**/*",
       "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,test,__tests__,tests,powered-test,example,examples,*.d.ts}",
-      "dist/preload.js"
+      "dist/preload.js",
+      "dist/sliceWorker.js"
     ],
     "directories": {
       "buildResources": "brandkit"

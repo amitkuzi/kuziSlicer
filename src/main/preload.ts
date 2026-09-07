@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+type Wrapper = (event: unknown, ...args: unknown[]) => void
+const wrappers = new WeakMap<(...args: unknown[]) => void, Wrapper>()
+
 // Expose IPC channels to renderer
 contextBridge.exposeInMainWorld('electron', {
   // Invoke methods (async)
@@ -52,11 +55,15 @@ contextBridge.exposeInMainWorld('electron', {
     }
   },
 
-  // Listen for events from main process
+  // Listen for events from main process. The wrapper that strips the IpcRendererEvent is
+  // remembered per listener, so off() can actually remove it -- comparing a freshly built
+  // wrapper never matches and leaks the listener.
   on: (channel: string, listener: (...args: unknown[]) => void) => {
-    const validChannels = ['printer:connected', 'printer:disconnected', 'app:update']
+    const validChannels = ['job:progress', 'printer:connected', 'printer:disconnected', 'app:update']
     if (validChannels.includes(channel)) {
-      ipcRenderer.on(channel, (event, ...args) => listener(...args))
+      const wrapper = (_event: unknown, ...args: unknown[]) => listener(...args)
+      wrappers.set(listener, wrapper)
+      ipcRenderer.on(channel, wrapper)
     } else {
       throw new Error(`Invalid channel: ${channel}`)
     }
@@ -64,9 +71,10 @@ contextBridge.exposeInMainWorld('electron', {
 
   // Remove listeners
   off: (channel: string, listener: (...args: unknown[]) => void) => {
-    const validChannels = ['printer:connected', 'printer:disconnected', 'app:update']
-    if (validChannels.includes(channel)) {
-      ipcRenderer.off(channel, (event, ...args) => listener(...args))
+    const wrapper = wrappers.get(listener)
+    if (wrapper) {
+      ipcRenderer.off(channel, wrapper)
+      wrappers.delete(listener)
     }
   },
 })
