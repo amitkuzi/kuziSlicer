@@ -17,6 +17,14 @@ import { createHash } from 'crypto'
 import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate'
 
 const PLATE = 'Metadata/plate_1.gcode'
+const FILAMENT_DIAMETER = 1.75
+const PLA_DENSITY = 1.24
+
+/** The slicer release the reused CONFIG_BLOCK came from, so a reader can interpret it. */
+function templateVersion(config: string[]): string {
+  const declared = config.find((line) => /^; version = /.test(line))?.split('= ')[1]?.trim()
+  return declared || '02.05.00.66'
+}
 
 export interface BambuPackageOptions {
   readonly nozzleTemp: number
@@ -177,10 +185,25 @@ export function buildProject(gcode: string, options: BambuPackageOptions): Buffe
         `G1 X0 Y${((bounds.minY + bounds.maxY) / 2).toFixed(3)} F18000 ; move to safe pos`)
   )
 
+  // A real export's header carries the filament totals and the version of the profile the
+  // file was built against; the viewer reads these before it looks at a single move. The
+  // version line names the BambuStudio release whose CONFIG_BLOCK we reuse verbatim, which
+  // is what a reader needs in order to interpret the settings below it.
+  const filamentMm = body.reduce((sum, line) => {
+    const e = line.match(/^G[01](?:\s+[XYZ]-?[\d.]+)*\s+E(\d[\d.]*)/)
+    return e ? sum + Number(e[1]) : sum
+  }, 0)
+  const volumeCm3 = (filamentMm * Math.PI * (FILAMENT_DIAMETER / 2) ** 2) / 1000
   const plate = [
     '; HEADER_BLOCK_START',
+    `; BambuStudio ${templateVersion(blocks.config)}`,
     '; kuziSlicer',
     `; total layer number: ${layers}`,
+    `; total filament length [mm] : ${filamentMm.toFixed(2)}`,
+    `; total filament volume [cm^3] : ${volumeCm3.toFixed(2)}`,
+    `; total filament weight [g] : ${(volumeCm3 * PLA_DENSITY).toFixed(2)}`,
+    `; filament_density: ${PLA_DENSITY}`,
+    `; filament_diameter: ${FILAMENT_DIAMETER}`,
     `; max_z_height: ${bounds.maxZ.toFixed(2)}`,
     '; filament: 1',
     '; HEADER_BLOCK_END',
