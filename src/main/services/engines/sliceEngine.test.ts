@@ -102,4 +102,37 @@ for (const pattern of PATTERNS) {
 }
 assert.strictEqual(getPattern('nope').id, 'grid', 'unknown pattern falls back to grid')
 
+// --- curve simplification -------------------------------------------------
+// A dense triangulated cylinder puts one contour vertex at every facet edge. Without
+// simplification a real high-poly model (FlaxCat, 98k triangles) sliced into 864k G-code
+// moves, 90% of them sub-millimeter -- Bambu Studio's kinematic simulator, unable to reach
+// cruising speed between that many corners, estimated a 2-day print for a 3-hour part.
+function cylinder(radius: number, height: number, segments: number): StlGeometry {
+  const ring = (z: number) =>
+    Array.from({ length: segments }, (_, i) => {
+      const a = (i / segments) * Math.PI * 2
+      return [radius + radius * Math.cos(a), radius + radius * Math.sin(a), z]
+    })
+  const bottom = ring(0)
+  const top = ring(height)
+  const vertices: number[][] = []
+  for (let i = 0; i < segments; i++) {
+    const j = (i + 1) % segments
+    vertices.push(bottom[i], bottom[j], top[j], bottom[i], top[j], top[i])
+  }
+  const d = radius * 2
+  return { vertices, bounds: { min: [0, 0, 0], max: [d, d, height] } }
+}
+
+const denseCylinder = cylinder(10, 1, 720) // one vertex every half a degree, far finer than any nozzle can resolve
+const denseLayer = SliceEngine.sliceMesh(denseCylinder, 0.5)[0]
+assert.strictEqual(denseLayer.contours.length, 1)
+assert.ok(denseLayer.contours[0].length < 100,
+  `a 720-facet circle must simplify to well under 100 points, got ${denseLayer.contours[0].length}`)
+// The simplified loop must still be a circle of the right size, not a collapsed sliver.
+const cx = denseLayer.contours[0].map((p) => p.x)
+const cy = denseLayer.contours[0].map((p) => p.y)
+assert.ok(Math.max(...cx) - Math.min(...cx) > 19.9, 'simplification must not shrink the shape in x')
+assert.ok(Math.max(...cy) - Math.min(...cy) > 19.9, 'simplification must not shrink the shape in y')
+
 console.log(`sliceEngine + infill: OK (${PATTERNS.length} patterns)`)

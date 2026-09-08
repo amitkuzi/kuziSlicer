@@ -149,12 +149,57 @@ export class SliceEngine {
       // Two points can't enclose area; drop those slivers rather than emitting
       // zero-width "loops" the G-code stage would turn into stuttering moves.
       if (contour.length >= 3) {
-        const simplified = this.dropCollinear(contour)
+        const simplified = this.simplifyContour(this.dropCollinear(contour))
         if (simplified.length >= 3) contours.push(simplified)
       }
     }
 
     return contours
+  }
+
+  /**
+   * Collapse a curved contour down to the segments printing can actually tell apart.
+   * A dense STL puts one polygon vertex at every triangle edge crossing a curve, so a
+   * smooth surface slices into thousands of near-collinear points per loop -- on FlaxCat
+   * (98k triangles) that was 864k G-code moves, 90% of them under 1mm, and Bambu Studio's
+   * kinematic simulator (which cannot reach cruising speed between that many corners)
+   * estimated a 2-day print for a 3-hour part. Douglas-Peucker with a tolerance well under
+   * nozzle width throws away sub-printable wiggle while keeping the real shape.
+   */
+  private static readonly SIMPLIFY_TOLERANCE = 0.02
+  private static simplifyContour(contour: Contour): Contour {
+    if (contour.length < 5) return contour
+    // A generic (non-convex) split point would need an O(n^2) farthest-pair search; the
+    // opposite index is a cheap stand-in that halves the recursion depth just as well for
+    // the roughly-round cross-sections a slicer actually produces.
+    const half = Math.floor(contour.length / 2)
+    const a = this.douglasPeucker(contour.slice(0, half + 1), this.SIMPLIFY_TOLERANCE)
+    const b = this.douglasPeucker(contour.slice(half).concat([contour[0]]), this.SIMPLIFY_TOLERANCE)
+    return [...a.slice(0, -1), ...b.slice(0, -1)]
+  }
+
+  private static douglasPeucker(points: Contour, tolerance: number): Contour {
+    if (points.length < 3) return points
+    const first = points[0]
+    const last = points[points.length - 1]
+    let maxDist = 0
+    let index = 0
+    for (let i = 1; i < points.length - 1; i++) {
+      const dist = this.perpendicularDistance(points[i], first, last)
+      if (dist > maxDist) { maxDist = dist; index = i }
+    }
+    if (maxDist <= tolerance) return [first, last]
+    const left = this.douglasPeucker(points.slice(0, index + 1), tolerance)
+    const right = this.douglasPeucker(points.slice(index), tolerance)
+    return [...left.slice(0, -1), ...right]
+  }
+
+  private static perpendicularDistance(point: Point2, a: Point2, b: Point2): number {
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const len = Math.hypot(dx, dy)
+    if (len < 1e-9) return Math.hypot(point.x - a.x, point.y - a.y)
+    return Math.abs(dy * point.x - dx * point.y + b.x * a.y - b.y * a.x) / len
   }
 
   /**
