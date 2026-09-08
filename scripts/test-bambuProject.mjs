@@ -71,6 +71,18 @@ const layerCount = Number(plate.match(/^; total layer number: (\d+)$/m)[1])
 assert.ok(layerCount > 1, 'layer count must be recorded')
 assert.equal(lines.filter((l) => /^; layer num\/total_layer_count: \d+\/\d+$/.test(l)).length, layerCount,
   'every layer must emit a firmware progress marker')
+// Bambu Studio's Preview tab segments "prepare" from "printing" at ; CHANGE_LAYER and
+// times each layer from ; Z_HEIGHT / ; LAYER_HEIGHT -- without them it timed a whole
+// packaged file as 100% prepare (2+ days) and showed an empty plate, model time 0s.
+assert.equal(lines.filter((l) => l === '; CHANGE_LAYER').length, layerCount, 'every layer must mark ; CHANGE_LAYER')
+assert.equal(lines.filter((l) => /^; Z_HEIGHT: [\d.]+$/.test(l)).length, layerCount, 'every layer must report ; Z_HEIGHT')
+assert.ok(lines.every((l, i) => l !== '; CHANGE_LAYER' || lines[i + 1] === `; Z_HEIGHT: ${lines[i + 1]?.match(/[\d.]+/)?.[0]}`),
+  '; CHANGE_LAYER must be immediately followed by ; Z_HEIGHT')
+assert.ok(lines.some((l) => l === `; LAYER_HEIGHT: ${settings.layerHeight}`), 'layer height must be reported to Bambu Studio')
+// Bambu/Orca colours the Preview by ; FEATURE:, not kuziSlicer's own ;TYPE: convention.
+for (const feature of ['Outer wall', 'Inner wall', 'Sparse infill']) {
+  assert.ok(lines.some((l) => l === `; FEATURE: ${feature}`), `expected a ; FEATURE: ${feature} tag`)
+}
 
 let first = null, maxZ = 0
 for (const line of lines.slice(lines.indexOf('; layer num/total_layer_count: 1/' + layerCount))) {

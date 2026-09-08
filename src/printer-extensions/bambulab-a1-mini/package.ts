@@ -83,8 +83,20 @@ function templateBlocks(lines: string[]) {
  * (the machine blocks own those) and translate layer markers into the firmware's progress
  * notifications so the printer's own progress bar tracks the job.
  */
+// Bambu/OrcaSlicer's own G-code viewer keys its Preview tab off these exact comments: it
+// segments "prepare" from "printing" at "; CHANGE_LAYER" (without it, Bambu Studio timed
+// our whole file as prepare and showed "Model printing time: 0s" -- an empty plate is the
+// visible symptom, not a separate bug), and colours moves by "; FEATURE: <name>", not the
+// Cura/Prusa-style ";TYPE:" tags kuziSlicer's own G-code viewer uses elsewhere.
+const FEATURE_BY_TYPE: Record<string, string> = {
+  'WALL-OUTER': 'Outer wall', 'WALL-INNER': 'Inner wall',
+  SKIN: 'Top surface', FILL: 'Sparse infill', SUPPORT: 'Support',
+}
+
 function bambuBody(gcode: string): { body: string[]; layers: number } {
   const lines = gcode.split(/\r?\n/)
+  const layerHeight = Number(gcode.match(/^; Layer Height: ([\d.]+)mm$/m)?.[1])
+  if (!(layerHeight > 0)) throw new Error('G-code header has no layer height')
   const first = lines.findIndex((line) => /^; Layer 1\/\d+$/.test(line))
   if (first < 0) throw new Error('G-code has no layer markers; nothing to package')
   const last = lines.findIndex((line) => line === '; End of print')
@@ -94,13 +106,25 @@ function bambuBody(gcode: string): { body: string[]; layers: number } {
   const layers = kept.filter((line) => /^; Layer \d+\/\d+$/.test(line)).length
   const body: string[] = []
   let index = 0
-  for (const line of kept) {
-    if (!/^; Layer \d+\/\d+$/.test(line)) {
+  for (let i = 0; i < kept.length; i++) {
+    const line = kept[i]
+    const layerMarker = line.match(/^; Layer (\d+)\/\d+$/)
+    const type = line.match(/^;TYPE:([\w-]+)$/)
+    if (type) {
+      const feature = FEATURE_BY_TYPE[type[1]]
+      if (feature) body.push(`; FEATURE: ${feature}`)
+      body.push(line)
+      continue
+    }
+    if (!layerMarker) {
       body.push(line)
       continue
     }
     index++
-    body.push(`; layer num/total_layer_count: ${index}/${layers}`, `M73 L${index}`,
+    // The Z move always immediately follows the layer marker (see GcodeEngine.generate).
+    const z = kept[i + 1]?.match(/^G1 Z([\d.]+) F600$/)?.[1] ?? '0'
+    body.push('; CHANGE_LAYER', `; Z_HEIGHT: ${z}`, `; LAYER_HEIGHT: ${layerHeight}`,
+      `; layer num/total_layer_count: ${index}/${layers}`, `M73 L${index}`,
       `M991 S0 P${index - 1} ;notify layer change`)
   }
   return { body, layers }

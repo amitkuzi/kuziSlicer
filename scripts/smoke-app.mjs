@@ -139,13 +139,18 @@ try {
 
   // 2. Skip the first-run config wizard if it is showing.
   // On a fresh profile the wizard can mount after the splash clears, so keep trying.
-  for (let attempt = 0; attempt < 15; attempt++) {
-    const gone = await cdp.evaluate(`
+  // "Not found yet" and "already dismissed" look identical from one snapshot, and the
+  // wizard can still be mid-mount on the first few checks -- only treat it as gone once
+  // it has actually been seen, or after enough attempts that a slow mount is implausible.
+  let sawWizard = false
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const state = await cdp.evaluate(`
       const skip = [...document.querySelectorAll('button')].find(b => /skip/i.test(b.textContent))
-      if (skip) { skip.click(); return false }
-      return true
+      if (skip) { skip.click(); return 'wizard' }
+      return 'gone'
     `)
-    if (gone && attempt > 0) break
+    if (state === 'wizard') sawWizard = true
+    if (state === 'gone' && (sawWizard || attempt > 5)) break
     await sleep(500)
   }
 
@@ -230,28 +235,6 @@ try {
   check(sliced.hasGyroid, 'the selected infill pattern reached the slicer')
   check(sliced.types.length >= 3, 'feature types tagged for the preview', sliced.types.join(' '))
 
-  // 7b. Dispatch that slice to an A1 mini over the real IPC path, pointed at a dead
-  // address. Packaging and validation run before any socket opens, so a connection-stage
-  // failure is proof the whole slice -> Bambu project -> prepare() chain held together.
-  const dispatch = await cdp.evaluate(`
-    const printers = await window.electron.invoke('gcode:printers')
-    const a1 = printers.find(p => p.id === 'bambulab-a1-mini')
-    if (!a1) return { ok: false, reason: 'A1 mini profile missing' }
-    const file = await window.electron.invoke('gcode:generate', ${JSON.stringify(modelPath)},
-      a1.name, 'PLA (Generic)',
-      { layerHeight: 0.2, infillDensity: 15, infillPattern: 'grid', shellThickness: 0.8, supportEnabled: false, fanSpeed: 100 },
-      { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] })
-    const result = await window.electron.invoke('printer:print-gcode', {
-      extension: 'bambulab-a1-mini',
-      connection: { ip: '127.0.0.1', accessCode: 'abcd1234', serialNumber: '00M00A000000000', firmware: 'stock' },
-      gcodePath: file, nozzle: 0.4, nozzleTemp: 200, bedTemp: 60, objectName: 'smoke-box',
-    })
-    return { ok: true, ...result }
-  `)
-  check(dispatch.ok && dispatch.success === false, 'dispatch to an unreachable printer fails instead of claiming success', dispatch.reason || dispatch.message)
-  check(/connection failed|closed before confirmation|timeout/i.test(dispatch.message || ''),
-    'the failure is at the connection, so packaging and validation passed', dispatch.message)
-
   // 8. The preview parses that G-code into layers (what the slider drives).
   const preview = await cdp.evaluate(`
     const canvases = [...document.querySelectorAll('canvas')]
@@ -281,6 +264,30 @@ try {
   check(banner.seen.length > 0, 'the busy indicator appears while slicing', banner.seen[0] || 'never appeared')
   check(banner.seen.some(t => /%/.test(t)), 'it reports real percentage progress', banner.seen.filter(t => /%/.test(t)).slice(-1)[0] || 'no percentage')
   check(banner.cleared, 'the busy indicator clears when the slice finishes')
+
+  // 8c. Dispatch that slice to an A1 mini over the real IPC path, pointed at a dead
+  // address. Packaging and validation run before any socket opens, so a connection-stage
+  // failure is proof the whole slice -> Bambu project -> prepare() chain held together.
+  // Kept after the timing-sensitive progress check above: this slice JIT-warms the worker
+  // enough that a follow-up tiny box finishes inside a single 100ms poll and looks instant.
+  const dispatch = await cdp.evaluate(`
+    const printers = await window.electron.invoke('gcode:printers')
+    const a1 = printers.find(p => p.id === 'bambulab-a1-mini')
+    if (!a1) return { ok: false, reason: 'A1 mini profile missing' }
+    const file = await window.electron.invoke('gcode:generate', ${JSON.stringify(modelPath)},
+      a1.name, 'PLA (Generic)',
+      { layerHeight: 0.2, infillDensity: 15, infillPattern: 'grid', shellThickness: 0.8, supportEnabled: false, fanSpeed: 100 },
+      { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] })
+    const result = await window.electron.invoke('printer:print-gcode', {
+      extension: 'bambulab-a1-mini',
+      connection: { ip: '127.0.0.1', accessCode: 'abcd1234', serialNumber: '00M00A000000000', firmware: 'stock' },
+      gcodePath: file, nozzle: 0.4, nozzleTemp: 200, bedTemp: 60, objectName: 'smoke-box',
+    })
+    return { ok: true, ...result }
+  `)
+  check(dispatch.ok && dispatch.success === false, 'dispatch to an unreachable printer fails instead of claiming success', dispatch.reason || dispatch.message)
+  check(/connection failed|closed before confirmation|timeout/i.test(dispatch.message || ''),
+    'the failure is at the connection, so packaging and validation passed', dispatch.message)
 
   // 9. The sidebar width handle actually resizes the panel and remembers it.
   const resize = await cdp.evaluate(`
@@ -334,7 +341,12 @@ try {
   `)
   check(added.count === 1 && added.name === 'Smoke Printer', 'test printer persisted over IPC', `${added.count} configured`)
   await cdp.send('Page.reload')
-  await sleep(4000)
+  // Poll instead of a fixed sleep -- a fixed budget it used to clear comfortably can turn
+  // marginal the moment the mount path picks up one more await (e.g. another IPC fetch).
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (await cdp.evaluate(`return !!document.querySelector('aside')`)) break
+    await sleep(500)
+  }
 
   // Survives a reload: this is what "persisted" actually has to mean.
   const restored = await cdp.evaluate(`
