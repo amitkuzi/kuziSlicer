@@ -83,6 +83,19 @@ assert.ok(lines.some((l) => l === `; LAYER_HEIGHT: ${settings.layerHeight}`), 'l
 for (const feature of ['Outer wall', 'Inner wall', 'Sparse infill']) {
   assert.ok(lines.some((l) => l === `; FEATURE: ${feature}`), `expected a ; FEATURE: ${feature} tag`)
 }
+// Every ; FEATURE: must carry the width the viewer draws (and meters material) with, and
+// each layer must name the object slice_info.config declares -- Bambu Studio crashed
+// opening layer 1 of a file that had neither, even a 25-move one.
+// (The template's own start/end blocks carry a bare "; FEATURE: Custom"; only the feature
+// tags we emit for our toolpaths are checked here.)
+const ours = ['Outer wall', 'Inner wall', 'Top surface', 'Sparse infill', 'Support'].map((f) => `; FEATURE: ${f}`)
+assert.ok(lines.some((l) => ours.includes(l)), 'expected feature tags')
+assert.ok(lines.every((l, i) => !ours.includes(l) || /^; LINE_WIDTH: [\d.]+$/.test(lines[i + 1] || '')),
+  'every ; FEATURE: we emit must be followed by ; LINE_WIDTH:')
+const declaredObject = strFromU8(unzipSync(new Uint8Array(project))['Metadata/slice_info.config'])
+  .match(/<object identify_id="(\d+)"/)[1]
+assert.equal(lines.filter((l) => l === `; OBJECT_ID: ${declaredObject}`).length, layerCount,
+  'every layer must attribute its moves to the object slice_info.config declares')
 
 let first = null, maxZ = 0
 for (const line of lines.slice(lines.indexOf('; layer num/total_layer_count: 1/' + layerCount))) {

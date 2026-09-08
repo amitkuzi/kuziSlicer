@@ -93,7 +93,7 @@ const FEATURE_BY_TYPE: Record<string, string> = {
   SKIN: 'Top surface', FILL: 'Sparse infill', SUPPORT: 'Support',
 }
 
-function bambuBody(gcode: string): { body: string[]; layers: number } {
+function bambuBody(gcode: string, lineWidth: number, objectId: string): { body: string[]; layers: number } {
   const lines = gcode.split(/\r?\n/)
   const layerHeight = Number(gcode.match(/^; Layer Height: ([\d.]+)mm$/m)?.[1])
   if (!(layerHeight > 0)) throw new Error('G-code header has no layer height')
@@ -112,7 +112,9 @@ function bambuBody(gcode: string): { body: string[]; layers: number } {
     const type = line.match(/^;TYPE:([\w-]+)$/)
     if (type) {
       const feature = FEATURE_BY_TYPE[type[1]]
-      if (feature) body.push(`; FEATURE: ${feature}`)
+      // LINE_WIDTH is how the viewer knows how wide to draw (and how much material a move
+      // lays down); every extrusion run in a real Bambu file carries one.
+      if (feature) body.push(`; FEATURE: ${feature}`, `; LINE_WIDTH: ${lineWidth}`)
       body.push(line)
       continue
     }
@@ -123,9 +125,11 @@ function bambuBody(gcode: string): { body: string[]; layers: number } {
     index++
     // The Z move always immediately follows the layer marker (see GcodeEngine.generate).
     const z = kept[i + 1]?.match(/^G1 Z([\d.]+) F600$/)?.[1] ?? '0'
+    // OBJECT_ID ties each layer's moves back to the object declared in slice_info.config;
+    // without it the viewer has no object to attribute the layer to.
     body.push('; CHANGE_LAYER', `; Z_HEIGHT: ${z}`, `; LAYER_HEIGHT: ${layerHeight}`,
       `; layer num/total_layer_count: ${index}/${layers}`, `M73 L${index}`,
-      `M991 S0 P${index - 1} ;notify layer change`)
+      `M991 S0 P${index - 1} ;notify layer change`, `; OBJECT_ID: ${objectId}`)
   }
   return { body, layers }
 }
@@ -139,7 +143,12 @@ export function buildProject(gcode: string, options: BambuPackageOptions): Buffe
   const entries = unzipSync(new Uint8Array(fs.readFileSync(templatePath())))
   if (!entries[PLATE]) throw new Error(`Template package is missing ${PLATE}`)
   const blocks = templateBlocks(strFromU8(entries[PLATE]).split(/\r?\n/))
-  const { body, layers } = bambuBody(gcode)
+  // The G-code's OBJECT_ID has to be the id slice_info.config declares, or the viewer
+  // attributes the layers to an object it never heard of.
+  const sliceInfo = entries['Metadata/slice_info.config'] ? strFromU8(entries['Metadata/slice_info.config']) : ''
+  const objectId = sliceInfo.match(/<object identify_id="(\d+)"/)?.[1]
+  if (!objectId) throw new Error('Template slice_info.config declares no object id')
+  const { body, layers } = bambuBody(gcode, options.nozzle, objectId)
 
   const bounds = extrusionBounds(body)
   if (!(bounds.maxZ > 0 && bounds.maxZ <= 180) || !(bounds.maxX > bounds.minX) || !(bounds.maxY > bounds.minY)) {
