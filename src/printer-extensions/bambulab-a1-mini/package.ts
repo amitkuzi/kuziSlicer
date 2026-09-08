@@ -189,8 +189,10 @@ export function buildProject(gcode: string, options: BambuPackageOptions): Buffe
   // file was built against; the viewer reads these before it looks at a single move. The
   // version line names the BambuStudio release whose CONFIG_BLOCK we reuse verbatim, which
   // is what a reader needs in order to interpret the settings below it.
+  // Only extrusion along a real XY move lays material down; an E-only move is the prime
+  // that pairs with a retraction and nets to nothing.
   const filamentMm = body.reduce((sum, line) => {
-    const e = line.match(/^G[01](?:\s+[XYZ]-?[\d.]+)*\s+E(\d[\d.]*)/)
+    const e = line.match(/^G[01]\s+X-?[\d.]+\s+Y-?[\d.]+[^;]*?\sE(\d[\d.]*)/)
     return e ? sum + Number(e[1]) : sum
   }, 0)
   const volumeCm3 = (filamentMm * Math.PI * (FILAMENT_DIAMETER / 2) ** 2) / 1000
