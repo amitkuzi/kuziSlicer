@@ -461,6 +461,10 @@ async function initializeServices() {
 }
 
 app.whenReady().then(async () => {
+  // Windows groups taskbar buttons by AppUserModelID, not by the window's icon. Without
+  // this the app inherits electron.exe's identity (and its icon) whenever it runs
+  // unpackaged; the packaged build gets the right icon from electron-builder either way.
+  if (process.platform === 'win32') app.setAppUserModelId('com.kuzislicer.app')
   await initializeServices()
   createWindow()
 })
