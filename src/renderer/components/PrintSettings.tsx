@@ -8,6 +8,14 @@ interface InfillPatternInfo {
   description: string
 }
 
+/** A rapid printer extension manifest plus the printer profiles it claims. */
+interface PrinterExtensionInfo {
+  name: string
+  title: string
+  firmware: string[]
+  profiles: PrinterProfile[]
+}
+
 export interface PrintSettingsState {
   modelName: string
   printer: string
@@ -120,6 +128,12 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
     speed: false,
   })
   const [wizardStep, setWizardStep] = useState(0)
+  // Sending to a printer needs the file we just wrote, plus which extension drives it.
+  const [gcodePath, setGcodePath] = useState<string | null>(null)
+  const [extensions, setExtensions] = useState<PrinterExtensionInfo[]>([])
+  const [connection, setConnection] = useState({ ip: '', accessCode: '', serialNumber: '' })
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null)
 
   // Reset to step 1 whenever the user switches into Simple mode, so the
   // guided flow always starts fresh rather than resuming mid-wizard.
@@ -165,7 +179,18 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
       .invoke('gcode:infill-patterns')
       .then((list) => setInfillPatterns((list as InfillPatternInfo[]) || []))
       .catch((e) => console.error('Failed to fetch infill patterns:', e))
+    window.electron
+      .invoke('printer:extensions')
+      .then((list) => setExtensions((list as PrinterExtensionInfo[]) || []))
+      .catch((e) => console.error('Failed to fetch printer extensions:', e))
   }, [])
+
+  // Any change to the model or the settings makes the last slice stale: never let the
+  // "send" button dispatch G-code that no longer matches what is on screen.
+  useEffect(() => {
+    setGcodePath(null)
+    setSendResult(null)
+  }, [modelPath, modelTransform, settings])
 
   const layerRange = layerHeightRange(settings.nozzleSize)
 
@@ -307,12 +332,39 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
       if (!read.success || read.content === undefined) {
         throw new Error(read.error || `Could not read generated G-code from ${gcodeFilePath}`)
       }
+      setGcodePath(gcodeFilePath)
+      setSendResult(null)
       onGenerateGcode?.(read.content)
     } catch (e) {
       console.error('Failed to generate G-code:', e)
       setGenerateError(e instanceof Error ? e.message : String(e))
     } finally {
       setGenerating(false)
+    }
+  }
+
+  // The extension that drives the selected printer, if one claims that profile.
+  const extension = extensions.find((e) => e.profiles.some((p) => p.id === settings.printer))
+
+  const handleSendToPrinter = async () => {
+    if (!gcodePath || !extension) return
+    setSending(true)
+    setSendResult(null)
+    try {
+      const result = (await window.electron.invoke('printer:print-gcode', {
+        extension: extension.name,
+        connection: { ...connection, firmware: extension.firmware[0] },
+        gcodePath,
+        nozzle: settings.nozzleSize,
+        nozzleTemp: settings.extruderTemp,
+        bedTemp: settings.bedTemp,
+        objectName: settings.modelName || 'model',
+      })) as { success: boolean; message: string }
+      setSendResult(result)
+    } catch (e) {
+      setSendResult({ success: false, message: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setSending(false)
     }
   }
 
@@ -782,6 +834,55 @@ export const PrintSettings: React.FC<PrintSettingsProps> = ({
         >
           {generating ? 'Generating…' : 'Generate G-code'}
         </button>
+
+        {/* Send over the LAN. Credentials are held for this session only, never written to disk. */}
+        {extension && (
+          <div className="space-y-2 rounded border border-fg2/20 p-3">
+            <h3 className="text-sm font-semibold text-fg">Send to {extension.title}</h3>
+            <input
+              value={connection.ip}
+              onChange={(e) => setConnection({ ...connection, ip: e.target.value.trim() })}
+              placeholder="Printer IP (e.g. 192.168.1.14)"
+              className="w-full rounded border border-fg2/20 bg-ground px-2 py-1.5 text-xs text-fg"
+            />
+            <input
+              type="password"
+              value={connection.accessCode}
+              onChange={(e) => setConnection({ ...connection, accessCode: e.target.value.trim() })}
+              placeholder="LAN access code"
+              className="w-full rounded border border-fg2/20 bg-ground px-2 py-1.5 text-xs text-fg"
+            />
+            <input
+              value={connection.serialNumber}
+              onChange={(e) => setConnection({ ...connection, serialNumber: e.target.value.trim() })}
+              placeholder="Serial number"
+              className="w-full rounded border border-fg2/20 bg-ground px-2 py-1.5 text-xs text-fg"
+            />
+            <p className="text-[11px] text-fg2">
+              Kept in memory for this session only. The printer must be in LAN mode and idle.
+            </p>
+            <button
+              onClick={handleSendToPrinter}
+              disabled={sending || !gcodePath || !connection.ip || !connection.accessCode || !connection.serialNumber}
+              className="w-full rounded bg-ember px-4 py-2 text-sm font-semibold text-onEmber transition-colors hover:bg-ember/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {sending ? 'Sending…' : 'Send to printer'}
+            </button>
+            {!gcodePath && (
+              <p className="text-[11px] text-fg2">Generate G-code first — the slice must match the current settings.</p>
+            )}
+            {sendResult && (
+              <p
+                role="alert"
+                className={`rounded px-2 py-1.5 text-[11px] ${
+                  sendResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-700'
+                }`}
+              >
+                {sendResult.message}
+              </p>
+            )}
+          </div>
+        )}
         <button
           onClick={handleReset}
           className="w-full px-4 py-2 bg-fg2/10 hover:bg-fg2/20 text-fg rounded font-medium text-sm transition-colors"

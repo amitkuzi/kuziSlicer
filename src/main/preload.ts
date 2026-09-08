@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electron', {
       'printer:extension-print',
       'printer:extension-status',
       'printer:extension-control',
+      'printer:print-gcode',
       'file:open',
       'file:read',
       'file:read-binary',

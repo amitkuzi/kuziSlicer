@@ -153,6 +153,19 @@ ipcMain.handle('printer:extension-print', async (_event, data: { extension: stri
   try { return await runPrint(printerExtensions.get(data.extension), data.connection, new Uint8Array(data.bytes), data.nozzle) }
   catch (error) { return { success: false, message: error instanceof Error ? error.message : 'Print failed' } }
 })
+/**
+ * Print kuziSlicer's own toolpaths: the extension wraps them in its printer's project
+ * format first, then the same dispatch path as a vendor-sliced project runs the job.
+ */
+ipcMain.handle('printer:print-gcode', async (_event, data: { extension: string; connection: PrinterConnection; gcodePath: string; nozzle: number; nozzleTemp: number; bedTemp: number; objectName: string }) => {
+  try {
+    const extension = printerExtensions.get(data.extension)
+    if (!extension.pack) throw new Error(`${extension.manifest.title} only accepts projects exported by its vendor slicer`)
+    const gcode = fs.readFileSync(data.gcodePath, 'utf-8')
+    const project = extension.pack(gcode, { nozzle: data.nozzle, nozzleTemp: data.nozzleTemp, bedTemp: data.bedTemp, objectName: data.objectName })
+    return await runPrint(extension, data.connection, project, data.nozzle)
+  } catch (error) { return { success: false, message: error instanceof Error ? error.message : 'Print failed' } }
+})
 ipcMain.handle('printer:extension-status', async (_event, data: { extension: string; connection: PrinterConnection }) => {
   const client = printerExtensions.get(data.extension).connect(data.connection)
   try { return await bounded(signal => client.status(signal)) } finally { client.close() }

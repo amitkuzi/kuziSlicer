@@ -12,7 +12,7 @@ const built = esbuild.buildSync({ entryPoints: [path.resolve('src/printer-extens
 const mod = { exports: {} }
 new Function('module', 'exports', 'require', built.outputFiles[0].text)(mod, mod.exports, require)
 const { prepare } = mod.exports
-const gcode = '; BambuStudio\n; total layer number: 1\n; max_z_height: 1\nM104 S220\nM140 S60\nG1 X10 Y10 Z1 E1\n'
+const gcode = '; BambuStudio\n; total layer number: 1\n; max_z_height: 1\nM104 S220\nM140 S60\n; MACHINE_START_GCODE_END\nG1 X10 Y10 Z1 E1\n'
 const settings = { printer_model: 'Bambu Lab A1 mini', nozzle_diameter: ['0.4'] }
 function archive(options = {}) {
   const code = options.gcode ?? gcode

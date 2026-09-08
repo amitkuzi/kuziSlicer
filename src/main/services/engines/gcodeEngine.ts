@@ -77,6 +77,9 @@ export class GcodeEngine {
     gcode.push(`; Perimeters: ${perimeterCount}`)
     gcode.push(`; Supports: ${settings.supportEnabled ? 'on' : 'off'}`)
     gcode.push(`; Layers: ${layers.length}`)
+    // Slicer-neutral spellings the validation engine and the Bambu packager both read.
+    gcode.push(`; total layer number: ${layers.length}`)
+    gcode.push(`; max_z_height: ${(bounds.max[2] - bounds.min[2]).toFixed(2)}`)
     gcode.push('; ============================================================')
     gcode.push('')
 
@@ -103,13 +106,22 @@ export class GcodeEngine {
     let position: Point2 | null = null
     let retracted = false
 
+    // A direct-drive machine grinds filament on a bowden-sized retract, so the printer
+    // profile wins over the filament's generic value when it declares one.
+    const retractDistance = opts.printer.retractDistance ?? opts.filament.retractDistance
+    const retractFeed = Math.round((opts.printer.retractSpeed ?? opts.filament.retractSpeed) * 60)
+    // Retracting on every hop between infill segments costs more time than it saves in
+    // ooze, and on a direct drive it is the main source of extruder wear.
+    const MIN_RETRACT_TRAVEL = 2
+
     const extrusionFor = (distance: number) =>
       (distance * settings.layerHeight * lineWidth) / filamentArea
 
     const travelTo = (target: Point2) => {
-      if (position && Math.hypot(target.x - position.x, target.y - position.y) < 1e-6) return
-      if (!retracted && position) {
-        gcode.push(`G1 E-${opts.filament.retractDistance.toFixed(4)} F${Math.round(opts.filament.retractSpeed * 60)}`)
+      const hop = position ? Math.hypot(target.x - position.x, target.y - position.y) : Infinity
+      if (hop < 1e-6) return
+      if (!retracted && position && hop >= MIN_RETRACT_TRAVEL) {
+        gcode.push(`G1 E-${retractDistance.toFixed(4)} F${retractFeed}`)
         retracted = true
       }
       gcode.push(`G0 X${target.x.toFixed(3)} Y${target.y.toFixed(3)} F${travelRate}`)
@@ -124,7 +136,7 @@ export class GcodeEngine {
       const distance = Math.hypot(target.x - position.x, target.y - position.y)
       if (distance < 1e-6) return
       if (retracted) {
-        gcode.push(`G1 E${opts.filament.retractDistance.toFixed(4)} F${Math.round(opts.filament.retractSpeed * 60)}`)
+        gcode.push(`G1 E${retractDistance.toFixed(4)} F${retractFeed}`)
         retracted = false
       }
       gcode.push(
@@ -157,7 +169,9 @@ export class GcodeEngine {
       if (layer.contours.length === 0 && layerSupports.length === 0) continue
 
       gcode.push(`; Layer ${index + 1}/${layers.length}`)
-      gcode.push(`G1 Z${(layer.z + offsetZ).toFixed(3)} F600`)
+      // SliceEngine samples the middle of each layer; the nozzle has to sit at its TOP,
+      // otherwise every layer -- the first one most dangerously -- prints half a layer low.
+      gcode.push(`G1 Z${(layer.z + offsetZ + settings.layerHeight / 2).toFixed(3)} F600`)
       if (index === 0) gcode.push('M106 S0')
       else if (index === SKIN_LAYERS) gcode.push(`M106 S${Math.round((settings.fanSpeed / 100) * 255)}`)
 

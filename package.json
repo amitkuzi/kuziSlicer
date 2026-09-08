@@ -35,7 +35,8 @@
     "test:printerextensions": "node scripts/test-rapidPrinterExtensions.mjs && node scripts/test-rapidPrinterPrepare.mjs && node scripts/test-rapidPrinterRegistry.mjs && node scripts/test-rapidPrinterTransport.mjs",
     "test:plugintemplates": "node scripts/test-pluginTemplates.mjs && node src/plugins/PluginHost/templates/tests/smoke.mjs",
     "printer:bench": "node scripts/printer-extension-bench.mjs",
-    "printer:new": "node scripts/create-printer-extension.mjs"
+    "printer:new": "node scripts/create-printer-extension.mjs",
+    "test:bambuproject": "node scripts/test-bambuProject.mjs"
   },
   "dependencies": {
     "axios": "^1.6.0",

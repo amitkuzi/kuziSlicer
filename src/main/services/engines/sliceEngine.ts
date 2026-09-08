@@ -225,7 +225,12 @@ export class SliceEngine {
       const cos = bx * n1.x + by * n1.y
       const scale = distance / Math.max(cos, 0.35) // cap spikes at sharp corners
 
-      result.push({ x: curr.x + bx * scale, y: curr.y + by * scale })
+      const point = { x: curr.x + bx * scale, y: curr.y + by * scale }
+      // At a sharp reflex corner the capped bisector can overshoot past the opposite wall
+      // and land outside the loop, which prints a whisker beside the model. Those corners
+      // are rare, so only they pay for the containment test.
+      if (cos < 0.35 && !this.isInside([contour], point)) continue
+      result.push(point)
     }
 
     return result.length >= 3 ? result : []

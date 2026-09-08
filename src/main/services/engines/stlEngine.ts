@@ -38,9 +38,14 @@ export class StlEngine {
     }
   }
 
+  /**
+   * A binary STL is exactly 84 + 50 * triangleCount bytes. That size check is the only
+   * reliable test: the 80-byte header is free-form and routinely contains spaces (and
+   * even the word "solid"), so sniffing the first bytes misreads real binary files.
+   */
   private static isAsciiStl(buffer: Buffer): boolean {
-    const header = buffer.toString('utf-8', 0, 5)
-    return header === 'solid' || buffer.toString('utf-8', 0, 5).match(/\s/) !== null
+    if (buffer.length >= 84 && 84 + buffer.readUInt32LE(80) * 50 === buffer.length) return false
+    return true
   }
 
   private static parseAsciiStl(filePath: string): StlGeometry {

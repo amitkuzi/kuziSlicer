@@ -230,6 +230,28 @@ try {
   check(sliced.hasGyroid, 'the selected infill pattern reached the slicer')
   check(sliced.types.length >= 3, 'feature types tagged for the preview', sliced.types.join(' '))
 
+  // 7b. Dispatch that slice to an A1 mini over the real IPC path, pointed at a dead
+  // address. Packaging and validation run before any socket opens, so a connection-stage
+  // failure is proof the whole slice -> Bambu project -> prepare() chain held together.
+  const dispatch = await cdp.evaluate(`
+    const printers = await window.electron.invoke('gcode:printers')
+    const a1 = printers.find(p => p.id === 'bambulab-a1-mini')
+    if (!a1) return { ok: false, reason: 'A1 mini profile missing' }
+    const file = await window.electron.invoke('gcode:generate', ${JSON.stringify(modelPath)},
+      a1.name, 'PLA (Generic)',
+      { layerHeight: 0.2, infillDensity: 15, infillPattern: 'grid', shellThickness: 0.8, supportEnabled: false, fanSpeed: 100 },
+      { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] })
+    const result = await window.electron.invoke('printer:print-gcode', {
+      extension: 'bambulab-a1-mini',
+      connection: { ip: '127.0.0.1', accessCode: 'abcd1234', serialNumber: '00M00A000000000', firmware: 'stock' },
+      gcodePath: file, nozzle: 0.4, nozzleTemp: 200, bedTemp: 60, objectName: 'smoke-box',
+    })
+    return { ok: true, ...result }
+  `)
+  check(dispatch.ok && dispatch.success === false, 'dispatch to an unreachable printer fails instead of claiming success', dispatch.reason || dispatch.message)
+  check(/connection failed|closed before confirmation|timeout/i.test(dispatch.message || ''),
+    'the failure is at the connection, so packaging and validation passed', dispatch.message)
+
   // 8. The preview parses that G-code into layers (what the slider drives).
   const preview = await cdp.evaluate(`
     const canvases = [...document.querySelectorAll('canvas')]

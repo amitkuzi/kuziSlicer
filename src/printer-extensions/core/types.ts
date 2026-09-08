@@ -17,6 +17,12 @@ export interface PrinterStatus {
   readonly progress: number
   readonly error: number
 }
+export interface PackOptions {
+  readonly nozzleTemp: number
+  readonly bedTemp: number
+  readonly nozzle: number
+  readonly objectName: string
+}
 export interface PreparedPrint {
   readonly bytes: Uint8Array
   readonly sha256: string
@@ -42,6 +48,12 @@ export interface RapidPrinterExtension {
     readonly firmware: readonly string[]
   }
   readonly profiles: readonly PrinterProfile[]
+  /**
+   * Wrap kuziSlicer toolpaths in whatever project envelope this printer's firmware needs
+   * (machine start/end sequence, metadata). Extensions that only accept projects exported
+   * by the vendor's own slicer leave this out.
+   */
+  pack?(gcode: string, options: PackOptions): Uint8Array
   prepare(bytes: Uint8Array, nozzle: number): PreparedPrint
   connect(connection: PrinterConnection): PrinterTransport
 }

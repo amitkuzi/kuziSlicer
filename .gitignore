@@ -36,3 +36,6 @@ dist/preload.js
 Thumbs.db
 
 /graphify-out/**
+
+# Local scratch artifacts
+scratch-*

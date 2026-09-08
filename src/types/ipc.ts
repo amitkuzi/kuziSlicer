@@ -20,6 +20,9 @@ export interface PrinterProfile {
   maxSpeed: number
   defaultSpeed: number
   acceleration: number
+  /** Overrides the filament's retraction when the extruder needs it (direct drive wants ~0.8mm, bowden ~5mm). */
+  retractDistance?: number
+  retractSpeed?: number
 }
 
 export interface FilamentProfile {
@@ -75,6 +78,7 @@ export interface AppSettings {
 export type InvokeChannels = {
   'printer:extensions': () => Promise<Array<RapidPrinterExtension['manifest'] & { profiles: RapidPrinterExtension['profiles'] }>>
   'printer:extension-print': (data: { extension: string; connection: PrinterConnection; bytes: Uint8Array; nozzle: number }) => Promise<{ success: boolean; message: string; job?: string; sha256?: string }>
+  'printer:print-gcode': (data: { extension: string; connection: PrinterConnection; gcodePath: string; nozzle: number; nozzleTemp: number; bedTemp: number; objectName: string }) => Promise<{ success: boolean; message: string; job?: string; sha256?: string }>
   'printer:extension-status': (data: { extension: string; connection: PrinterConnection }) => Promise<PrinterStatus>
   'printer:extension-control': (data: { extension: string; connection: PrinterConnection; command: 'pause' | 'resume' | 'stop' }) => Promise<{ success: true }>
   'printer:list': () => Promise<Printer[]>

@@ -25,6 +25,9 @@ export interface PrinterProfile {
   maxSpeed: number
   defaultSpeed: number
   acceleration: number
+  /** Overrides the filament's retraction when the extruder needs it (direct drive wants ~0.8mm, bowden ~5mm). */
+  retractDistance?: number
+  retractSpeed?: number
 }
 
 export interface FilamentProfile {
